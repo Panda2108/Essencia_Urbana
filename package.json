@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/*.test.mjs",
-    "test:checkout": "node tests/checkout-ui.mjs"
+    "test:checkout": "node tests/checkout-ui.mjs",
+    "test:vendor": "node tests/vendor-ui.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",

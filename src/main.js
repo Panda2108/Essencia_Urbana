@@ -2,6 +2,7 @@ import { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } fro
 import { db, configured, result, catalogue, accountData, rpc } from './api.js';
 import { previewProducts } from './catalogue.js';
 import template from './app.html?raw';
+import VendorPanel from './vendor.js';
 import './style.css';
 export const money = value => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value || 0));
 const date = value => new Date(value).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' });
@@ -16,8 +17,9 @@ const iconPaths = {
 };
 const Icon = {props:['name'], setup(){return {iconPaths};}, template:'<svg class="ui-icon" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="iconPaths[name]"/></svg>'};
 createApp({
- components:{Icon},
+ components:{Icon,VendorPanel},
  setup() {
+ const vendor=ref(null);
  const user=ref(null),products=ref([]),cart=ref([]),orders=ref([]),reviews=ref([]);
  const emptyProfile=()=>({name:'',phone:'',address:'',points:0});
  const defaults=()=>({dark:false,font_size:'normal',voice_reader:false});
@@ -40,12 +42,12 @@ createApp({
  const [data,account]=await Promise.all([catalogue(),id?accountData(id):null]);
  if(id!==user.value?.id)return;
  products.value=data||[];
- if(account){profile.value=account.profile;preferences.value=account.preferences;cart.value=account.cart;orders.value=account.orders;reviews.value=account.reviews;}
+ if(account){vendor.value=account.vendor;profile.value=account.profile;preferences.value=account.preferences;cart.value=account.cart;orders.value=account.orders;reviews.value=account.reviews;}
  loadError.value='';
  }
  async function load(){loading.value=true;try{
  if(!configured){products.value=previewProducts.map(p=>({...p,img:'/'+p.img}));return;}
- const session=await result(db.auth.getSession());user.value=session.session?.user||null;await refresh();
+ const session=await result(db.auth.getSession());user.value=session.session?.user||null;await refresh();if(vendor.value)view.value='negocio';
  }catch(e){loadError.value=errorText(e);}finally{loading.value=false;}}
  async function action(fn,success){if(busy.value)return false;busy.value=true;try{await fn();if(success)notify(success);return true;}catch(e){notify(errorText(e),true);return false;}finally{busy.value=false;}}
  const requireUser=()=>{if(!configured){notify('Las compras aún no están disponibles. Inténtalo más tarde.',true);return false;}if(!user.value){modal.value='auth';authMessage.value='';return false;}return true;};
@@ -91,8 +93,8 @@ createApp({
  async function edit(o,i,d){await action(async()=>{await rpc('edit_order_item',{p_order_id:o.id,p_product_id:i.product_id,p_stall_id:i.stall_id,p_quantity:Math.max(0,i.quantity+d)});await refresh();});}
  function addToOrder(o){addingOrder.value=o.id;view.value='tienda';category.value='TODOS';search.value='';}
  async function archive(){await action(async()=>{await rpc('archive_history');modal.value=null;await refresh();},'Historial ocultado. Los registros siguen guardados.');}
- async function authenticate(){if(!configured)return;authMessage.value='';await action(async()=>{if(authMode.value==='register'){const d=await result(db.auth.signUp({email:email.value.trim(),password:password.value,options:{data:{name:authName.value.trim()},emailRedirectTo:window.location.origin}}));if(!d.session){authMessage.value='Cuenta creada. Confirma el registro desde tu correo antes de iniciar sesión.';password.value='';return;}user.value=d.user;}else{const d=await result(db.auth.signInWithPassword({email:email.value.trim(),password:password.value}));user.value=d.user;}password.value='';modal.value=null;await refresh();});}
- function clearAccount(){user.value=null;cart.value=[];orders.value=[];reviews.value=[];profile.value=emptyProfile();preferences.value=defaults();addingOrder.value=null;usePoints.value=false;sessionStorage.removeItem('eu_checkout_request');}
+ async function authenticate(){if(!configured)return;authMessage.value='';await action(async()=>{if(authMode.value==='register'){const d=await result(db.auth.signUp({email:email.value.trim(),password:password.value,options:{data:{name:authName.value.trim()},emailRedirectTo:window.location.origin}}));if(!d.session){authMessage.value='Cuenta creada. Confirma el registro desde tu correo antes de iniciar sesión.';password.value='';return;}user.value=d.user;}else{const d=await result(db.auth.signInWithPassword({email:email.value.trim(),password:password.value}));user.value=d.user;}password.value='';modal.value=null;await refresh();if(vendor.value)navigate('negocio');});}
+ function clearAccount(){vendor.value=null;user.value=null;cart.value=[];orders.value=[];reviews.value=[];profile.value=emptyProfile();preferences.value=defaults();addingOrder.value=null;usePoints.value=false;sessionStorage.removeItem('eu_checkout_request');}
  async function logout(){await action(async()=>{await result(db.auth.signOut());clearAccount();modal.value=null;cartOpen.value=false;view.value='tienda';await refresh();});}
  async function saveProfile(){await action(async()=>{await result(db.from('profiles').update({name:profile.value.name.trim(),phone:profile.value.phone.trim(),address:profile.value.address.trim()}).eq('id',user.value.id));await refresh();},'Tus datos fueron guardados.');}
  async function saveSettings(){if(!requireUser())return;await action(async()=>{await result(db.from('preferences').update({dark:preferences.value.dark,font_size:preferences.value.font_size,voice_reader:preferences.value.voice_reader}).eq('user_id',user.value.id));},'Preferencias guardadas.');}
@@ -106,6 +108,6 @@ createApp({
  const keyHandler=e=>{if(e.key==='Escape'&&!busy.value){modal.value=null;cartOpen.value=false;}const root=modal.value?document.querySelector('.dialog'):cartOpen.value?document.querySelector('.cart-panel'):null;if(e.key==='Tab'&&root){const f=[...root.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea,select,a[href]')].filter(el=>el.offsetParent!==null),first=f[0],last=f.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};
  onMounted(async()=>{document.addEventListener('keydown',keyHandler);await load();if(db)subscription=db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT')clearAccount();else if(event==='SIGNED_IN'&&session?.user?.id!==user.value?.id){user.value=session.user;setTimeout(()=>refresh().catch(e=>notify(errorText(e),true)),0);}}).data.subscription;});
  onUnmounted(()=>{document.removeEventListener('keydown',keyHandler);subscription?.unsubscribe();clearTimeout(toastTimer);recognition?.abort();});
- return {stallId,stalls,activeStall,stallUrl,configured,user,products,cart,orders,reviews,profile,preferences,view,category,search,sort,busy,loading,loadError,cartOpen,menuOpen,modal,selected,selectedStall,selectedOrder,addingOrder,authMode,authName,email,password,authMessage,delivery,usePoints,paymentMethod,support,reviewRating,reviewComment,toast,listening,money,date,statusLabel,paymentLabel,categories,minPrice,maxPrice,stock,cheapest,cartQuantity,cartItems,cartCount,subtotal,discount,savings,visibleOrders,pendingOrders,filtered,title,productReviews,rating,canReview,navigate,compare,speak,add,quantity,remove,checkout,openPay,pay,openReceipt,downloadReceipt,askCancel,cancel,edit,addToOrder,archive,authenticate,logout,saveProfile,saveSettings,sendSupport,openReviews,saveReview,voiceSearch,load,notify,requireUser};
+ return {vendor,refresh,stallId,stalls,activeStall,stallUrl,configured,user,products,cart,orders,reviews,profile,preferences,view,category,search,sort,busy,loading,loadError,cartOpen,menuOpen,modal,selected,selectedStall,selectedOrder,addingOrder,authMode,authName,email,password,authMessage,delivery,usePoints,paymentMethod,support,reviewRating,reviewComment,toast,listening,money,date,statusLabel,paymentLabel,categories,minPrice,maxPrice,stock,cheapest,cartQuantity,cartItems,cartCount,subtotal,discount,savings,visibleOrders,pendingOrders,filtered,title,productReviews,rating,canReview,navigate,compare,speak,add,quantity,remove,checkout,openPay,pay,openReceipt,downloadReceipt,askCancel,cancel,edit,addToOrder,archive,authenticate,logout,saveProfile,saveSettings,sendSupport,openReviews,saveReview,voiceSearch,load,notify,requireUser};
  },template
 }).mount('#app');

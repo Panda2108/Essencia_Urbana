@@ -1,0 +1,31 @@
+<section class="page-section vendor-panel">
+ <div class="section-heading"><div><span class="eyebrow">TU NEGOCIO, AL DÍA</span><h1>{{data?.stall.name || 'Mi negocio'}}</h1><p class="muted">{{data?.stall.seller}} · Precios, existencias y pedidos de tu puesto.</p></div><button class="btn" @click="reload" :disabled="busy||loading">Actualizar ↻</button></div>
+ <div v-if="error" class="notice error" role="alert">{{error}}</div><div v-if="message" class="notice success" role="status">{{message}}</div>
+ <p v-if="loading" class="muted" role="status">Cargando tu negocio…</p>
+ <template v-if="data">
+ <div class="vendor-stats"><article><small>Ventas registradas</small><strong>{{money(data.stats.sales)}}</strong></article><article><small>Pedidos por pagar</small><strong>{{data.stats.pending_orders}}</strong></article><article><small>Productos agotados</small><strong>{{data.stats.out_of_stock}}</strong></article><article><small>Productos con stock bajo</small><strong>{{data.stats.low_stock}}</strong></article></div>
+ <div class="vendor-toolbar"><div class="categories"><button :class="{selected:tab==='inventory'}" @click="tab='inventory'">Mis productos</button><button :class="{selected:tab==='orders'}" @click="tab='orders'">Pedidos del negocio</button><button :class="{selected:tab==='activity'}" @click="tab='activity'">Movimientos</button></div><small class="muted">Actualizado {{lastUpdate}}</small></div>
+ <template v-if="tab==='inventory'">
+ <div class="vendor-toolbar"><label>Buscar producto<input type="search" v-model="search" placeholder="Nombre del producto"></label><label>Disponibilidad<select v-model="filter"><option value="all">Todos</option><option value="out">Agotados</option><option value="low">Stock bajo (1–5)</option></select></label></div>
+ <p class="muted small-text">El stock disponible excluye las unidades reservadas en pedidos. Cada ajuste queda registrado con su motivo.</p>
+ <div v-if="!products.length" class="empty">No hay productos con esos filtros.</div>
+ <article v-for="p in products" :key="p.id" class="vendor-product">
+  <div class="vendor-product-title"><img :src="p.image" :alt="p.name" width="65" height="65"><div><small class="product-category">{{p.category}}</small><h3>{{p.name}}</h3><span class="vendor-stock" :class="{danger:p.stock===0}">{{p.stock}} disponibles</span></div></div>
+  <form class="vendor-price" @submit.prevent="price(p)"><label>Precio (S/)<input type="number" v-model="p.newPrice" min="0.01" max="100000" step="0.01" required :disabled="busy"></label><button class="btn" :disabled="busy||Number(p.newPrice)===Number(p.price)">Guardar precio</button></form>
+  <div class="vendor-stock-controls"><label>Unidades<input type="number" v-model="p.units" min="1" max="100000" step="1" :disabled="busy"></label><label>Motivo<input v-model="p.reason" maxlength="300" placeholder="Reposición, merma, inventario…" :disabled="busy"></label><div><button class="btn primary" @click="adjust(p,1)" :disabled="busy">＋ Reponer</button><button class="btn" @click="adjust(p,-1)" :disabled="busy||p.stock===0">− Retirar</button></div></div>
+ </article>
+ <form v-if="available.length" class="panel vendor-add" @submit.prevent="link"><h3>Incorporar un producto del mercado</h3><label>Producto<select v-model="newProduct" required><option disabled value="">Elige un producto</option><option v-for="p in available" :value="p.id">{{p.name}}</option></select></label><label>Precio (S/)<input type="number" v-model="newPrice" min="0.01" max="100000" step="0.01" required></label><label>Stock inicial<input type="number" v-model="newStock" min="0" max="100000" step="1" required></label><button class="btn primary" :disabled="busy">Incorporar producto</button></form>
+ </template>
+ <template v-else-if="tab==='orders'">
+ <label class="vendor-order-filter">Mostrar<select v-model="orderFilter"><option value="all">Todos los pedidos</option><option value="pending">Por pagar</option><option value="completed">Pago confirmado</option><option value="cancelled">Cancelados</option></select></label>
+ <div v-if="!orders.length" class="empty"><h3>Aún no hay pedidos para mostrar</h3><p>Los pedidos que incluyan tus productos aparecerán aquí.</p></div>
+ <article v-for="o in orders" :key="o.id" class="order-card"><div class="order-head"><div><b>Pedido #{{o.id.slice(0,8)}}</b><small>{{date(o.created_at)}}</small></div><span class="status" :class="o.status">{{o.status==='pending'?'Por pagar':o.status==='cancelled'?'Cancelado':'Pago confirmado'}}</span></div>
+ <div v-for="i in o.items" class="order-line"><img :src="i.image" :alt="i.name" width="50" height="50"><div class="line-info"><b>{{i.name}}</b><small>{{i.quantity}} × {{money(i.price)}}</small></div><strong>{{money(i.quantity*i.price)}}</strong></div>
+ <div class="order-bottom"><p><b>{{o.customer||'Cliente'}}</b><small v-if="o.phone">Teléfono: {{o.phone}}</small><small>{{o.delivery==='delivery'?'Entrega: '+o.address:'Retiro en el mercado'}}</small></p><strong>Tu venta: {{money(o.total)}}</strong></div>
+ <div v-if="o.status==='completed'" class="vendor-progress"><span>Preparación: <b>{{stages[o.stage]}}</b></span><div><button v-for="(label,key) in stages" class="btn small" :class="{primary:o.stage===key}" :disabled="busy||Object.keys(stages).indexOf(key)<=Object.keys(stages).indexOf(o.stage)" @click="setStage(o,key)">{{label}}</button></div></div>
+ <p v-else-if="o.status==='pending'" class="muted small-text">Las unidades ya están reservadas. Espera el pago para iniciar la preparación.</p>
+ </article>
+ </template>
+ <template v-else><div v-if="!data.events.length" class="empty">Tus reposiciones, retiros y cambios de precio aparecerán aquí.</div><article v-for="e in data.events" :key="e.id" class="vendor-event"><div><b>{{e.product}}</b><p>{{e.reason}}</p><small>{{date(e.created_at)}}</small></div><strong v-if="e.kind==='price'">{{money(e.price_before)}} → {{money(e.price_after)}}</strong><strong v-else>{{e.quantity>0?'+':''}}{{e.quantity}} uds.<small>{{e.before}} → {{e.after}} disponibles</small></strong></article></template>
+ </template>
+</section>

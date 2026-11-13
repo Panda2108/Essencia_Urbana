@@ -12,5 +12,6 @@ export function normalizeAccount(data = {}) {
       payments: list(order.payments),
     })),
     reviews: list(data.reviews),
+    vendor: data.vendor || null,
   };
 }

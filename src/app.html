@@ -26,7 +26,7 @@
             v-for="(label,key) in {tienda:'El mercado',ofertas:'Ofertas',comparar:'Comparar precios',frecuentes:'Mis frecuentes'}"
             :key="key" :class="{active:view===key}" @click="navigate(key)">{{label}} <span v-if="key==='ofertas'"
                 class="tiny-dot"></span></button></div>
-    <div class="nav-secondary"><button :class="{active:view==='pedidos'}" @click="navigate('pedidos')">Mis pedidos <b
+    <div class="nav-secondary"><button v-if="vendor" :class="{active:view==='negocio'}" @click="navigate('negocio')">Mi negocio</button><button :class="{active:view==='pedidos'}" @click="navigate('pedidos')">Mis pedidos <b
                 v-if="pendingOrders.length" class="count">{{pendingOrders.length}}</b></button><button
             :class="{active:view==='ajustes'}" @click="navigate('ajustes')">Accesibilidad</button></div>
 </nav>
@@ -136,6 +136,7 @@
             </div>
         </section>
     </template>
+    <VendorPanel v-else-if="view==='negocio' && vendor" :membership="vendor" :catalogue="products" @updated="refresh().catch(()=>notify('El cambio se guardó. Actualiza el mercado para ver los datos recientes.',true))"/>
     <section v-else-if="view==='pedidos'" class="page-section">
         <div class="section-heading">
             <div><span class="eyebrow">TODO EN UN SOLO LUGAR</span>

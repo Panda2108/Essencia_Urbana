@@ -28,3 +28,11 @@ La conexión de lectura con el Supabase configurado se comprobó previamente con
 Los pagos son de demostración, sin cobros reales ni validación bancaria. Los comprobantes no tienen valor tributario. Los mensajes de soporte se guardan en Supabase; no envían correos automáticamente. La entrega se coordina fuera del sistema.
 
 Las claves locales se guardan en .env.local y no se suben al repositorio. Vercel requiere las variables públicas de Supabase configuradas durante la compilación.
+
+## Panel de proveedores
+
+Tres cuentas de demostración creadas en Supabase y asignadas a sus puestos mediante una migración externa. Comprobado el inicio de sesión y la lectura del panel contra Supabase real: cada cuenta recibe su propio puesto y 17 productos. Las credenciales se entregan por separado, fuera del repositorio. Las direcciones .local son identificadores de demostración, sin recepción de correo.
+
+Funciones: reposiciones/retiros de existencias con motivo, cambios de precio, alertas de stock, pedidos del puesto, preparación/entrega, totales e historial de movimientos. Las operaciones están protegidas mediante membresía del lado de PostgreSQL; el navegador no puede elegir el puesto que administra.
+
+Diez pruebas PostgreSQL adicionales verifican aislamiento, permisos, stock no negativo, idempotencia, concurrencia de precios y preparación de pedidos propios. Prueba de navegador aislada del panel aprobada; prueba de compra de clientes repetida con éxito. Se verifican 27 pruebas de datos y plantillas en total cuando se proporcionan los SQL externos.

@@ -6,3 +6,8 @@ test('La plantilla del frontend compila sin expresiones inválidas', async () =>
   const source = await readFile(new URL('../src/app.html', import.meta.url), 'utf8');
   compile(source, { onError(error) { throw error; } });
 });
+
+test('El panel de proveedores compila sin expresiones inválidas', async () => {
+ const source=await readFile(new URL('../src/vendor.html',import.meta.url),'utf8');
+ compile(source,{onError(error){throw error;}});
+});

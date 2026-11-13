@@ -58,6 +58,7 @@ await context.route('https://*.supabase.co/**',async route=>{
  }
  if(path.endsWith('/rpc/archive_history')){state.orders.filter(o=>o.status!=='pending').forEach(o=>o.archived_at=new Date().toISOString());return reply(null);}
  const table=path.split('/').at(-1);
+ if(table==='stall_members')return reply(null);
  if(table==='profiles'){if(method==='PATCH')Object.assign(state.profile,body);return reply(state.profile);}
  if(table==='preferences'){if(method==='PATCH')Object.assign(state.preferences,body);return reply(state.preferences);}
  if(table==='orders')return reply(state.orders);
