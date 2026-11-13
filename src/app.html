@@ -104,7 +104,7 @@
                 <article v-for="p in filtered" :key="p.id" class="product-card"
                     @focusin="speak(p.name+', desde '+money(minPrice(p)))">
                     <div class="product-visual"><span v-if="!stock(p)" class="badge out">Agotado</span><span
-                            v-else-if="p.offer" class="badge">Buen precio</span><span v-else-if="stock(p)<=5"
+                            v-else-if="p.offer" class="badge">Oferta disponible</span><span v-else-if="stock(p)<=5"
                             class="badge low">Últimas unidades</span><button class="compare-icon" v-if="!stallId&&p.puestos.length>1" @click="compare(p)"
                             :aria-label="'Comparar precios de '+p.name">↔</button><img :src="p.img" :alt="p.name"
                             loading="lazy" width="220" height="190"></div>
@@ -114,10 +114,10 @@
                                 v-if="rating(p)">({{reviews.filter(r=>r.product_id===p.id).length}})</small></button>
                         <div class="price-line">
                             <span><small>{{stallId?'Precio del puesto':'Desde'}}</small><strong>{{money(minPrice(p))}}</strong></span><del
-                                v-if="maxPrice(p)>minPrice(p)">{{money(maxPrice(p))}}</del><span
-                                class="stock-label">{{stock(p)}} disponibles</span></div><button class="compare-link" v-if="!stallId&&p.puestos.length>1"
+                                v-if="referencePrice(p)>minPrice(p)">{{money(referencePrice(p))}}</del><span
+                                class="stock-label">{{view==='ofertas'?promoUnits(p)+' en oferta':stock(p)+' disponibles'}}</span></div><button class="compare-link" v-if="!stallId&&p.puestos.length>1"
                             @click="compare(p)">{{stallId?'Comparar con otros negocios':p.puestos.length+' puestos · Comparar precios'}}
-                            <span>→</span></button><div v-else class="compare-link product-seller">{{p.puestos[0]?.nombre}}</div><button class="btn add-button" @click="add(p)"
+                            <span>→</span></button><div v-if="promoUnits(p)>0" class="promotion-note">{{promoUnits(p)}} unidades a precio de oferta entre los puestos indicados.</div><div v-if="stallId||p.puestos.length===1" class="compare-link product-seller">{{p.puestos[0]?.nombre}}</div><button class="btn add-button" @click="add(p)"
                             :disabled="busy||!stock(p)">{{!stock(p)?'Sin stock':addingOrder?'Agregar al pedido':'Agregar a mi carrito'}} <span v-if="stock(p)">＋</span></button>
                     </div>
                 </article>
@@ -162,7 +162,7 @@
             </div>
             <div v-for="i in o.order_items" class="order-line" :key="i.product_id+i.stall_id"><img :src="i.image"
                     :alt="i.name" width="56" height="56">
-                <div class="line-info"><b>{{i.name}}</b><small>{{i.stall_name}} · {{money(i.price)}} c/u</small></div>
+                <div class="line-info"><b>{{i.name}}</b><small>{{i.stall_name}} · {{money(i.price)}} c/u</small><small v-if="i.offer_name">Oferta: {{i.offer_name}}</small></div>
                 <div v-if="o.status==='pending'" class="quantity"><button @click="edit(o,i,-1)" :disabled="busy"
                         :aria-label="'Quitar una unidad de '+i.name">−</button><span>{{i.quantity}}</span><button
                         @click="edit(o,i,1)" :disabled="busy" :aria-label="'Sumar una unidad de '+i.name">＋</button>
@@ -257,7 +257,7 @@
                 <article v-for="i in cartItems" class="cart-line" :key="i.product_id+i.stall_id"><img
                         :src="i.product?.img" :alt="i.product?.name" width="70" height="70">
                     <div>
-                        <b>{{i.product?.name||'Producto'}}</b><small>{{i.stall?.nombre}}</small><strong>{{money(i.expected_price)}}</strong>
+                        <b>{{i.product?.name||'Producto'}}</b><small>{{i.stall?.nombre}}</small><small v-if="i.stall?.oferta_id">{{i.stall.oferta_nombre}} · Precio promocional</small><strong>{{money(i.expected_price)}}</strong>
                         <p v-if="i.priceChanged" class="danger">El precio cambió. Quita y vuelve a agregar este
                             producto.</p>
                         <div class="quantity"><button @click="quantity(i,-1)" :disabled="busy"
@@ -330,7 +330,7 @@
                     v-model="selectedStall" :value="s.id" :disabled="!s.stock">
                 <div><b>{{s.nombre}}</b><small>{{s.vendedor}} · {{s.stock}} disponibles</small><span
                         v-if="s.id===cheapest(selected)?.id" class="best-price">Mejor precio disponible</span></div>
-                <strong>{{money(s.precio)}}</strong>
+                <strong>{{money(s.precio)}}<small v-if="s.oferta_id">Oferta · {{s.unidades_oferta}} unidades</small></strong>
             </label><button class="btn primary full" @click="add(selected,selectedStall)"
                 :disabled="busy||!selected.puestos.find(s=>s.id===selectedStall)?.stock">{{addingOrder?'Agregar al pedido':'Agregar a mi carrito'}} →</button>
         </template>

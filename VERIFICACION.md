@@ -58,3 +58,15 @@ Tarifa configurada en Supabase: S/ 5 por pedido a domicilio y S/ 0 por recojo. L
 Ocho pruebas adicionales de tarifa, dirección, canje, manipulación de precios, edición, cambios de tarifa e idempotencia. El recorrido de compra en navegador confirma el envío de S/ 5 en el total. Endpoint real get_checkout_settings verificado tras ejecutar el SQL en Supabase.
 
 Accesos directos protegidos por la sesión y membresía: ?panel=negocio&tab=add y ?panel=negocio&tab=history. Si no hay sesión, se solicita iniciarla. Las cuentas cliente no reciben permisos de negocio.
+
+## Ofertas por producto y controles comerciales
+
+El proveedor selecciona varios productos y elige para cada uno la cantidad de unidades y el porcentaje de descuento. La previsualización no publica cambios. El botón Listo, publicar oferta confirma la autorización del vendedor. No hay un límite comercial fijo del 20 %: se respeta el descuento elegido, con precio final positivo y menor al regular, redondeado a dos decimales.
+
+Supabase valida membresía, precios, stock y cupos promocionales; cada compra reserva cupo, cada pago lo convierte en vendido y cada cancelación lo devuelve de forma idempotente. Las ofertas pueden pausarse, reactivarse y tener fecha de finalización. Los pedidos ya reservados conservan su precio, aunque se pause o venza la oferta. Se mantiene el delivery de S/ 5.
+
+El historial de precios registra responsable, fecha, precio anterior y nuevo, publicación, pausas y reactivaciones. Los usuarios del frontend no pueden editar ni borrar el historial. Los cambios regulares anteriores se conservan sin duplicarse al repetir el SQL de controles.
+
+Las pruebas PostgreSQL adicionales cubren cupos, manipulación de precio, reservas, pagos/cancelaciones repetidos, expiración, autorización e historial. La prueba de navegador valida selección múltiple, porcentaje editable (incluido 50 %), previsualizar/volver a editar sin publicar, confirmación final, publicación, pausa/reactivación y límites del carrito. Los servicios de prueba del navegador están aislados de Supabase real; no se crean promociones comerciales de prueba en la base real.
+
+La auditoría también registra el retorno automático al precio regular al agotarse el cupo promocional y la recuperación del precio de oferta si una cancelación devuelve unidades. La autorización es del vendedor de su propio negocio: elegir descuento, previsualizar y confirmar Listo; no requiere un tercero.
