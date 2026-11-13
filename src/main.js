@@ -1,5 +1,5 @@
 import { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue/dist/vue.esm-bundler.js';
-import { db, configured, result, catalogue, accountData, customerPhases, rpc } from './api.js';
+import { db, configured, result, catalogue, accountData, customerPhases, checkoutSettings, rpc } from './api.js';
 import { previewProducts } from './catalogue.js';
 import template from './app.html?raw';
 import VendorPanel from './vendor.js';
@@ -26,7 +26,10 @@ createApp({
  const emptyProfile=()=>({name:'',phone:'',address:'',points:0});
  const defaults=()=>({dark:false,font_size:'normal',voice_reader:false});
  const profile=ref(emptyProfile()),preferences=ref(defaults());
- const stallId=ref(new URLSearchParams(window.location.search).get('negocio') || '');
+ const entryParams=new URLSearchParams(window.location.search);
+ const businessEntry=entryParams.get('panel')==='negocio';
+ const vendorInitialTab=['inventory','add','orders','history','activity'].includes(entryParams.get('tab'))?entryParams.get('tab'):'inventory';
+ const stallId=ref(entryParams.get('negocio') || '');
  const stalls=computed(()=>[...new Map(products.value.flatMap(p=>p.puestos).map(s=>[s.id,s])).values()]);
  const activeStall=computed(()=>stalls.value.find(s=>s.id===stallId.value));
  const stallUrl=id=>{const url=new URL(window.location.href);url.search='';url.searchParams.set('negocio',id);url.hash='';return url.pathname+url.search;};
@@ -34,6 +37,7 @@ createApp({
  const busy=ref(false),loading=ref(true),loadError=ref(''),cartOpen=ref(false),menuOpen=ref(false);
  const modal=ref(null),selected=ref(null),selectedStall=ref(''),selectedOrder=ref(null),addingOrder=ref(null);
  const authMode=ref('login'),authName=ref(''),email=ref(''),password=ref(''),authMessage=ref('');
+ const deliveryRate=ref(null);
  const delivery=ref('recoger'),usePoints=ref(false),paymentMethod=ref('billetera');
  const support=ref(''),reviewRating=ref(5),reviewComment=ref(''),toast=ref(null),listening=ref(false);
  let toastTimer,subscription,recognition,previousFocus,orderPoll,phaseRefreshing=false;
@@ -41,9 +45,9 @@ createApp({
  const errorText=e=>{const s=e?.message||'No se pudo completar la operación.';if(/Invalid login credentials/i.test(s))return 'Correo o contraseña incorrectos.';if(/Email not confirmed/i.test(s))return 'Confirma tu correo antes de iniciar sesión.';if(/Failed to fetch|NetworkError/i.test(s))return 'No se pudo conectar. Revisa tu conexión y vuelve a intentar.';return s;};
  async function refresh(){
  const id=user.value?.id;
- const [data,account]=await Promise.all([catalogue(),id?accountData(id):null]);
+ const [data,account,settings]=await Promise.all([catalogue(),id?accountData(id):null,checkoutSettings()]);
  if(id!==user.value?.id)return;
- products.value=data||[];
+ products.value=data||[];deliveryRate.value=settings?.delivery_fee==null?null:Number(settings.delivery_fee);
  if(account){vendor.value=account.vendor;profile.value=account.profile;preferences.value=account.preferences;cart.value=account.cart;orders.value=account.orders;reviews.value=account.reviews;}
  loadError.value='';
  }
@@ -54,7 +58,7 @@ createApp({
  async function refreshOrders(){await action(refresh);}
  async function load(){loading.value=true;try{
  if(!configured){products.value=previewProducts.map(p=>({...p,img:'/'+p.img}));return;}
- const session=await result(db.auth.getSession());user.value=session.session?.user||null;await refresh();if(vendor.value)view.value='negocio';
+ const session=await result(db.auth.getSession());user.value=session.session?.user||null;await refresh();if(vendor.value)view.value='negocio';else if(businessEntry&&!user.value)modal.value='auth';else if(businessEntry)notify('Esta cuenta no tiene acceso a un negocio. Inicia sesión con el correo del proveedor.',true);
  }catch(e){loadError.value=errorText(e);}finally{loading.value=false;}}
  async function action(fn,success){if(busy.value)return false;busy.value=true;try{await fn();if(success)notify(success);return true;}catch(e){notify(errorText(e),true);return false;}finally{busy.value=false;}}
  const requireUser=()=>{if(!configured){notify('Las compras aún no están disponibles. Inténtalo más tarde.',true);return false;}if(!user.value){modal.value='auth';authMessage.value='';return false;}return true;};
@@ -68,6 +72,8 @@ createApp({
  const cartCount=computed(()=>cart.value.reduce((n,i)=>n+i.quantity,0));
  const subtotal=computed(()=>cart.value.reduce((n,i)=>n+Number(i.expected_price)*i.quantity,0));
  const discount=computed(()=>usePoints.value&&profile.value.points>=500&&subtotal.value>=10?10:0);
+ const deliveryCost=computed(()=>delivery.value==='delivery'?Number(deliveryRate.value||0):0);
+ const cartTotal=computed(()=>subtotal.value-discount.value+deliveryCost.value);
  const savings=computed(()=>cartItems.value.reduce((n,i)=>n+(i.product?Math.max(maxPrice(i.product)-i.expected_price,0)*i.quantity:0),0));
  const visibleOrders=computed(()=>orders.value.filter(o=>!o.archived_at));
  const pendingOrders=computed(()=>orders.value.filter(o=>o.status==='pending'));
@@ -86,13 +92,13 @@ createApp({
  modal.value=null;await refresh();if(!addingOrder.value)cartOpen.value=true;speak(p.name+' agregado.');},addingOrder.value?'Producto agregado al pedido.':undefined);}
  async function quantity(item,delta){await action(async()=>{const n=item.quantity+delta;if(n>(item.stall?.stock||0)&&delta>0)throw new Error('No hay más stock disponible.');const q=n<=0?db.from('cart_items').delete():db.from('cart_items').update({quantity:n});await result(q.eq('user_id',user.value.id).eq('product_id',item.product_id).eq('stall_id',item.stall_id));await refresh();});}
  async function remove(i){await quantity(i,-i.quantity);}
- async function checkout(){if(!requireUser()||!cartCount.value)return;await action(async()=>{let request=sessionStorage.getItem('eu_checkout_request');if(!request){request=crypto.randomUUID();sessionStorage.setItem('eu_checkout_request',request);}await rpc('create_order',{p_request_id:request,p_delivery:delivery.value,p_use_points:discount.value>0});sessionStorage.removeItem('eu_checkout_request');usePoints.value=false;cartOpen.value=false;view.value='pedidos';await refresh();},'Pedido guardado. Puedes editarlo, pagarlo o cancelarlo.');}
+ async function checkout(){if(!requireUser()||!cartCount.value)return;if(delivery.value==='delivery'&&deliveryRate.value===null)return notify('El envío a domicilio no está disponible. Elige recojo en el mercado.',true);await action(async()=>{let request=sessionStorage.getItem('eu_checkout_request');if(!request){request=crypto.randomUUID();sessionStorage.setItem('eu_checkout_request',request);}await rpc('create_order',{p_request_id:request,p_delivery:delivery.value,p_use_points:discount.value>0,p_expected_delivery_fee:deliveryCost.value});sessionStorage.removeItem('eu_checkout_request');usePoints.value=false;cartOpen.value=false;view.value='pedidos';await refresh();},'Pedido guardado. Puedes editarlo, pagarlo o cancelarlo.');}
  function openPay(o){selectedOrder.value=o;modal.value='payment';}
  async function pay(){await action(async()=>{const id=selectedOrder.value.id;await rpc('confirm_demo_payment',{p_order_id:id,p_method:paymentMethod.value});await refresh();const completed=orders.value.find(o=>o.id===id);if(completed)openReceipt(completed);else modal.value=null;},'Pago confirmado. Sigue la preparación en Mis pedidos.');}
  function openReceipt(order){selectedOrder.value=order;modal.value='receipt';}
  function downloadReceipt(){
   const order=selectedOrder.value;if(!order)return;
-  const text=['ESENCIA URBANA','COMPROBANTE DE DEMOSTRACIÓN — SIN VALOR TRIBUTARIO','Pedido: '+order.id,'Fecha: '+date(order.created_at),'',...order.order_items.map(i=>i.name+' | '+i.stall_name+' | '+i.quantity+' × '+money(i.price)+' = '+money(i.quantity*i.price)),'','Subtotal: '+money(order.subtotal),'Descuento: '+money(order.discount),'Total: '+money(order.total),'Método: '+(paymentLabel[order.payments[0]?.method]||'Demostración'),'Entrega: '+(order.delivery==='recoger'?'Retiro en el mercado':order.delivery_address),'','No se realizó ningún cobro real.'].join('\n');
+  const text=['ESENCIA URBANA','COMPROBANTE DE DEMOSTRACIÓN — SIN VALOR TRIBUTARIO','Pedido: '+order.id,'Fecha: '+date(order.created_at),'',...order.order_items.map(i=>i.name+' | '+i.stall_name+' | '+i.quantity+' × '+money(i.price)+' = '+money(i.quantity*i.price)),'','Subtotal: '+money(order.subtotal),'Descuento: '+money(order.discount),'Envío: '+money(order.delivery_fee),'Total: '+money(order.total),'Método: '+(paymentLabel[order.payments[0]?.method]||'Demostración'),'Entrega: '+(order.delivery==='recoger'?'Retiro en el mercado':order.delivery_address),'','No se realizó ningún cobro real.'].join('\n');
   const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='Esencia-Urbana-'+order.id.slice(0,8)+'.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  function askCancel(o){selectedOrder.value=o;modal.value='cancel';}
@@ -115,6 +121,6 @@ createApp({
  const keyHandler=e=>{if(e.key==='Escape'&&!busy.value){modal.value=null;cartOpen.value=false;}const root=modal.value?document.querySelector('.dialog'):cartOpen.value?document.querySelector('.cart-panel'):null;if(e.key==='Tab'&&root){const f=[...root.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea,select,a[href]')].filter(el=>el.offsetParent!==null),first=f[0],last=f.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};
  onMounted(async()=>{document.addEventListener('keydown',keyHandler);orderPoll=setInterval(()=>{if(user.value&&view.value==='pedidos'&&!busy.value)refreshPhases().catch(()=>{});},15000);await load();if(db)subscription=db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT')clearAccount();else if(event==='SIGNED_IN'&&session?.user?.id!==user.value?.id){user.value=session.user;setTimeout(()=>refresh().catch(e=>notify(errorText(e),true)),0);}}).data.subscription;});
  onUnmounted(()=>{document.removeEventListener('keydown',keyHandler);subscription?.unsubscribe();clearInterval(orderPoll);clearTimeout(toastTimer);recognition?.abort();});
- return {phaseLabels,phaseReached,refreshOrders,vendor,refresh,stallId,stalls,activeStall,stallUrl,configured,user,products,cart,orders,reviews,profile,preferences,view,category,search,sort,busy,loading,loadError,cartOpen,menuOpen,modal,selected,selectedStall,selectedOrder,addingOrder,authMode,authName,email,password,authMessage,delivery,usePoints,paymentMethod,support,reviewRating,reviewComment,toast,listening,money,date,statusLabel,paymentLabel,categories,minPrice,maxPrice,stock,cheapest,cartQuantity,cartItems,cartCount,subtotal,discount,savings,visibleOrders,pendingOrders,filtered,title,productReviews,rating,canReview,navigate,compare,speak,add,quantity,remove,checkout,openPay,pay,openReceipt,downloadReceipt,askCancel,cancel,edit,addToOrder,archive,authenticate,logout,saveProfile,saveSettings,sendSupport,openReviews,saveReview,voiceSearch,load,notify,requireUser};
+ return {vendorInitialTab,deliveryRate,deliveryCost,cartTotal,phaseLabels,phaseReached,refreshOrders,vendor,refresh,stallId,stalls,activeStall,stallUrl,configured,user,products,cart,orders,reviews,profile,preferences,view,category,search,sort,busy,loading,loadError,cartOpen,menuOpen,modal,selected,selectedStall,selectedOrder,addingOrder,authMode,authName,email,password,authMessage,delivery,usePoints,paymentMethod,support,reviewRating,reviewComment,toast,listening,money,date,statusLabel,paymentLabel,categories,minPrice,maxPrice,stock,cheapest,cartQuantity,cartItems,cartCount,subtotal,discount,savings,visibleOrders,pendingOrders,filtered,title,productReviews,rating,canReview,navigate,compare,speak,add,quantity,remove,checkout,openPay,pay,openReceipt,downloadReceipt,askCancel,cancel,edit,addToOrder,archive,authenticate,logout,saveProfile,saveSettings,sendSupport,openReviews,saveReview,voiceSearch,load,notify,requireUser};
  },template
 }).mount('#app');

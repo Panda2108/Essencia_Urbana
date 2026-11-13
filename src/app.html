@@ -136,7 +136,7 @@
             </div>
         </section>
     </template>
-    <VendorPanel v-else-if="view==='negocio' && vendor" :membership="vendor" :catalogue="products" @updated="refresh().catch(()=>notify('El cambio se guardó. Actualiza el mercado para ver los datos recientes.',true))"/>
+    <VendorPanel v-else-if="view==='negocio' && vendor" :membership="vendor" :catalogue="products" :initial-tab="vendorInitialTab" @updated="refresh().catch(()=>notify('El cambio se guardó. Actualiza el mercado para ver los datos recientes.',true))"/>
     <section v-else-if="view==='pedidos'" class="page-section">
         <div class="section-heading">
             <div><span class="eyebrow">TODO EN UN SOLO LUGAR</span>
@@ -170,7 +170,7 @@
             </div>
             <div class="order-bottom">
                 <p>{{o.delivery==='recoger'?'Retiro en el mercado':'Entrega: '+o.delivery_address}}<small
-                        v-if="o.discount">Descuento por puntos: {{money(o.discount)}}</small><small
+                        v-if="o.delivery==='delivery'">Envío: {{money(o.delivery_fee)}}</small><small v-if="o.discount">Descuento por puntos: {{money(o.discount)}}</small><small
                         v-if="o.payments?.length">{{paymentLabel[o.payments[0].method]}} · Pago de demostración</small>
                 </p><strong>Total {{money(o.total)}}</strong>
             </div>
@@ -271,11 +271,10 @@
             <div class="cart-checkout">
                 <fieldset>
                     <legend>¿Cómo lo recibes?</legend><label><input type="radio" v-model="delivery" value="recoger">
-                        Recoger en mercado</label><label><input type="radio" v-model="delivery" value="delivery">
-                        Entrega a domicilio</label>
+                        Recoger en mercado · Sin costo</label><label><input type="radio" v-model="delivery" value="delivery">
+                        Entrega a domicilio · {{deliveryRate===null?'No disponible':money(deliveryRate)}}</label>
                 </fieldset>
-                <p v-if="delivery==='delivery'" class="muted small-text">Guarda la dirección en Mi cuenta. La entrega se
-                    coordina con el mercado, sin tarifa automática.</p><label v-if="profile.points>=500"
+                <p v-if="delivery==='delivery'" class="muted small-text">El costo de envío se suma al total del pedido. Guarda tu dirección en Mi cuenta antes de confirmar.</p><label v-if="profile.points>=500"
                     class="redeem"><input type="checkbox" v-model="usePoints" :disabled="subtotal<10"> Canjear 500
                     puntos por S/ 10</label>
                 <dl class="totals">
@@ -287,14 +286,15 @@
                         <dt>Descuento por puntos</dt>
                         <dd>− {{money(discount)}}</dd>
                     </div>
+                    <div v-if="delivery==='delivery'"><dt>Envío a domicilio</dt><dd>{{deliveryRate===null?'No disponible':money(deliveryCost)}}</dd></div>
                     <div class="total">
                         <dt>Total</dt>
-                        <dd>{{money(subtotal-discount)}}</dd>
+                        <dd>{{money(cartTotal)}}</dd>
                     </div>
                 </dl>
                 <p v-if="savings>0" class="saving">Comparando puestos ahorras hasta {{money(savings)}}</p><button
                     class="btn primary full" @click="checkout"
-                    :disabled="busy||cartItems.some(i=>i.priceChanged)">{{busy?'Guardando…':'Crear pedido'}}
+                    :disabled="busy||cartItems.some(i=>i.priceChanged)||(delivery==='delivery'&&deliveryRate===null)">{{busy?'Guardando…':'Crear pedido'}}
                     <span>→</span></button><small class="checkout-note">El stock se reserva al crear el pedido.</small>
             </div>
         </template>
@@ -347,7 +347,7 @@
  <h2 id="modal-title">¡Tu pago está confirmado!</h2>
  <p class="muted">Pedido #{{selectedOrder.id.slice(0,8)}} · {{date(selectedOrder.created_at)}}</p>
  <div v-for="i in selectedOrder.order_items" class="receipt-line"><div><b>{{i.name}}</b><small>{{i.stall_name}} · {{i.quantity}} × {{money(i.price)}}</small></div><strong>{{money(i.quantity*i.price)}}</strong></div>
- <dl class="totals"><div><dt>Subtotal</dt><dd>{{money(selectedOrder.subtotal)}}</dd></div><div v-if="selectedOrder.discount"><dt>Descuento por puntos</dt><dd>− {{money(selectedOrder.discount)}}</dd></div><div class="total"><dt>Total</dt><dd>{{money(selectedOrder.total)}}</dd></div></dl>
+ <dl class="totals"><div><dt>Subtotal</dt><dd>{{money(selectedOrder.subtotal)}}</dd></div><div v-if="selectedOrder.discount"><dt>Descuento por puntos</dt><dd>− {{money(selectedOrder.discount)}}</dd></div><div v-if="selectedOrder.delivery==='delivery'"><dt>Envío a domicilio</dt><dd>{{money(selectedOrder.delivery_fee)}}</dd></div><div class="total"><dt>Total</dt><dd>{{money(selectedOrder.total)}}</dd></div></dl>
  <p>{{selectedOrder.delivery==='recoger'?'El negocio preparará tus productos. Retíralos cuando figuren listos para entregar.':'Entrega: '+selectedOrder.delivery_address}}</p>
  <p class="saving">Ganaste {{Math.round(selectedOrder.total*0.4)}} puntos · Saldo: {{profile.points}} puntos</p>
  <p class="muted small-text">Pago de demostración. No se realizó un cobro real. Este comprobante no tiene valor tributario.</p>

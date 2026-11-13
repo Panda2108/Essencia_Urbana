@@ -8,6 +8,7 @@ export function normalizeAccount(data = {}) {
     cart: list(data.cart),
     orders: list(data.orders).map(order => ({
       ...order,
+      delivery_fee:Number(order.delivery_fee||0),
       order_items: list(order.order_items),
       payments: list(order.payments),
       progress: list(order.progress),

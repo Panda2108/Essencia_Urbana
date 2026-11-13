@@ -15,6 +15,7 @@ await page.route('https://*.supabase.co/**',async route=>{
  const reply=(data,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
  if(path==='/auth/v1/token')return reply({access_token:token,refresh_token:'test-token',expires_in:3600,token_type:'bearer',user});
  if(path==='/auth/v1/user')return reply(user);
+ if(path.endsWith('/rpc/get_checkout_settings'))return reply({delivery_fee:5});
  if(path.endsWith('/rpc/get_customer_order_phases'))return reply([]);
  if(path.endsWith('/rpc/get_catalog'))return reply(catalogue);
  if(path.startsWith('/storage/v1/object/public/product-images/'))return route.fulfill({status:200,contentType:'image/jpeg',body:await readFile('public/imagenes/arroz.jpg')});

@@ -50,3 +50,11 @@ Historial de proveedores separado de los pedidos activos: entregados y cancelado
 Nueve pruebas PostgreSQL adicionales de permisos de fotos, creación, idempotencia, aislamiento de clientes, fases estrictas y paginación. Prueba de navegador del alta con una foto real y de las fases cliente/proveedor aprobada en un servicio aislado. Actualización SQL aplicada por el usuario y endpoints reales comprobados; subida y lectura pública de una foto temporal verificadas en Supabase, sin crear productos ficticios ni alterar stock.
 
 Las tres contraseñas de proveedor se reemplazaron y se entregan únicamente en el archivo privado externo al repositorio.
+
+## Delivery
+
+Tarifa configurada en Supabase: S/ 5 por pedido a domicilio y S/ 0 por recojo. La tarifa se consulta para mostrar el total antes de crear el pedido y se valida en el servidor. Se guarda como delivery_fee en el pedido y se conserva al cambiar cantidades. No se recalculan los importes de pedidos anteriores. Carrito, historial y comprobante muestran el envío separado del subtotal.
+
+Ocho pruebas adicionales de tarifa, dirección, canje, manipulación de precios, edición, cambios de tarifa e idempotencia. El recorrido de compra en navegador confirma el envío de S/ 5 en el total. Endpoint real get_checkout_settings verificado tras ejecutar el SQL en Supabase.
+
+Accesos directos protegidos por la sesión y membresía: ?panel=negocio&tab=add y ?panel=negocio&tab=history. Si no hay sesión, se solicita iniciarla. Las cuentas cliente no reciben permisos de negocio.

@@ -7,6 +7,12 @@ export const db = configured ? createClient(url, key) : null;
 export async function result(query) { const { data, error } = await query; if (error) throw error; return data; }
 export const catalogue = () => result(db.rpc('get_catalog'));
 export const rpc = (name, args) => result(db.rpc(name, args));
+export async function checkoutSettings(){
+ const {data,error}=await db.rpc('get_checkout_settings');
+ if(error&&error.code==='PGRST202')return null;
+ if(error)throw error;
+ return data;
+}
 export async function membership(id) {
  const {data,error}=await db.from('stall_members').select('stall_id').eq('user_id',id).maybeSingle();
  if(error && ['42P01','PGRST205'].includes(error.code)) return null;

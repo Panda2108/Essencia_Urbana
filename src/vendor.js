@@ -6,9 +6,9 @@ const money=v=>new Intl.NumberFormat('es-PE',{style:'currency',currency:'PEN'}).
 const date=v=>new Date(v).toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'});
 const stages={nuevo:'Recibido',preparando:'En proceso',listo:'Listo para entregar',entregado:'Entregado'};
 export default {
- props:['membership','catalogue'],emits:['updated'],
+ props:['membership','catalogue','initialTab'],emits:['updated'],
  setup(props,{emit}){
-  const data=ref(null),loading=ref(true),busy=ref(false),error=ref(''),message=ref(''),tab=ref('inventory'),search=ref(''),filter=ref('all'),orderFilter=ref('all'),lastUpdate=ref('');
+  const data=ref(null),loading=ref(true),busy=ref(false),error=ref(''),message=ref(''),tab=ref(props.initialTab||'inventory'),search=ref(''),filter=ref('all'),orderFilter=ref('all'),lastUpdate=ref('');
   const draft=ref({name:'',category:'',price:1,stock:0}),photo=ref(null),photoPreview=ref(''),photoInput=ref(null);
   let uploadedPhoto=null,creationRequest=null;
   const categories=computed(()=>[...new Set((props.catalogue||[]).map(p=>p.category))]);
@@ -57,7 +57,7 @@ export default {
   }
   async function price(p){const n=Number(p.newPrice);if(!Number.isFinite(n)||n<=0)return error.value='El precio debe ser mayor que cero.';await action(()=>rpc('vendor_update_price',{p_product_id:p.id,p_price:n,p_expected_price:Number(p.price)}),'Precio actualizado. Los pedidos anteriores conservan su precio.');}
   async function setStage(order,stage){await action(()=>rpc('vendor_set_order_stage',{p_order_id:order.id,p_stage:stage}),'Estado de preparación actualizado.');}
-  onMounted(reload);
+  onMounted(async()=>{await reload();if(tab.value==='history')await loadHistory();});
   return{data,loading,busy,error,message,tab,search,filter,orderFilter,lastUpdate,draft,photo,photoPreview,photoInput,categories,history,historyFilter,historyMore,historyLoading,loadHistory,selectPhoto,createProduct,nextStage,stageDone,products,orders,reload,adjust,price,setStage,money,date,stages};
  },template
 };
