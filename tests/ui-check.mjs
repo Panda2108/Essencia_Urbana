@@ -1,0 +1,41 @@
+import { createServer } from 'vite';
+import { chromium } from '@playwright/test';
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+const server=await createServer({server:{host:"127.0.0.1",port:5174,strictPort:true}});await server.listen();
+const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+try {
+const page=await browser.newPage({viewport:{width:1440,height:1000}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto('http://127.0.0.1:5174/');
+await page.waitForSelector('.product-card');
+assert.equal(await page.locator('.product-card').count(),17);
+await page.getByRole('searchbox').fill('arroz');assert.equal(await page.locator('.product-card').count(),1);
+await page.getByRole('button',{name:'Comparar precios de Arroz Pacasmayo 750 g',exact:true}).click();
+assert.equal(await page.locator('.stall-option').count(),3);
+await page.keyboard.press('Escape');assert.equal(await page.locator('.dialog').count(),0);
+await page.getByRole('searchbox').fill('');
+await page.getByRole('button',{name:/Agregar a mi carrito/}).first().click();
+await page.getByRole('status').filter({hasText:'Las compras aún no están disponibles'}).waitFor();
+await page.getByRole('button',{name:'Cerrar aviso',exact:true}).click();await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo(0,0)});
+await mkdir('qa',{recursive:true});
+await page.screenshot({path:'qa/escritorio.png',fullPage:true});
+await page.getByRole('button',{name:'Inicia sesión',exact:false}).first().click();
+await page.getByRole('heading',{name:'Qué bueno tenerte aquí.'}).waitFor();
+await page.keyboard.press('Escape');
+await page.getByRole('button',{name:'Accesibilidad',exact:true}).click();
+await page.getByText('Modo oscuro',{exact:true}).click();
+assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+await page.getByText('Modo oscuro',{exact:true}).click();
+await page.getByRole('button',{name:'Esencia Urbana, inicio',exact:true}).click();
+await page.setViewportSize({width:390,height:844});
+assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'No debe haber desborde horizontal');
+await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo(0,0)});
+await page.screenshot({path:'qa/movil.png',fullPage:true});
+await page.getByRole('button',{name:'Abrir menú',exact:true}).click();
+await page.getByRole('button',{name:'Mis pedidos',exact:true}).click();
+await page.getByRole('heading',{name:'Tu mercado también tiene memoria'}).waitFor();
+assert.deepEqual(errors,[]);
+console.log('UI PASS: catálogo, búsqueda, comparador, modales, vista previa, modo oscuro y móvil.');
+
+} finally {await browser.close();await server.close();}

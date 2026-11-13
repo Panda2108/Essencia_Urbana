@@ -1,0 +1,377 @@
+<a class="skip-link" href="#main">Saltar al contenido</a>
+<div class="topline"><span>Hecho para tu barrio. Pensado para ti.</span><span>Productos de siempre · Precios en
+        soles</span></div>
+<header class="header">
+    <button class="brand" @click="navigate('tienda')" aria-label="Esencia Urbana, inicio"><span
+            class="brand-mark">e<span>u</span><i>✦</i></span><span>ESENCIA<br><strong>URBANA<span
+                    class="brand-dot">.</span></strong><small>EL MERCADO ESTÁ CERCA</small></span></button>
+    <form class="search" @submit.prevent="view='tienda'">
+        <Icon name="search" /><input v-model="search" type="search" aria-label="Buscar productos"
+            placeholder="¿Qué llevamos a casa hoy?"
+            @input="!['tienda','ofertas','comparar','frecuentes'].includes(view)&&(view='tienda')"><button type="button"
+            @click="voiceSearch" :class="{listening}" :aria-label="listening?'Detener dictado':'Buscar por voz'">
+            <Icon name="mic" />
+        </button>
+    </form>
+    <div class="header-actions"><button class="account-button" @click="user?navigate('cuenta'):(modal='auth')"><span
+                class="avatar"><template v-if="user">{{(profile.name||user.email).charAt(0).toUpperCase()}}</template>
+                <Icon v-else name="user" />
+            </span><span><small>{{user?'Qué bueno verte':'Bienvenido a tu mercado'}}</small><b>{{user?(profile.name||'Mi cuenta'):'Inicia sesión'}}</b></span></button><button class="cart-button" @click="cartOpen=true"
+            aria-label="Abrir carrito">
+            <Icon name="cart" /> <span>Mi carrito</span><b>{{cartCount}}</b>
+        </button><button class="menu-toggle" @click="menuOpen=!menuOpen" aria-label="Abrir menú">☰</button></div>
+</header>
+<nav class="nav" :class="{expanded:menuOpen}" aria-label="Navegación principal">
+    <div class="nav-main"><button
+            v-for="(label,key) in {tienda:'El mercado',ofertas:'Ofertas',comparar:'Comparar precios',frecuentes:'Mis frecuentes'}"
+            :key="key" :class="{active:view===key}" @click="navigate(key)">{{label}} <span v-if="key==='ofertas'"
+                class="tiny-dot"></span></button></div>
+    <div class="nav-secondary"><button :class="{active:view==='pedidos'}" @click="navigate('pedidos')">Mis pedidos <b
+                v-if="pendingOrders.length" class="count">{{pendingOrders.length}}</b></button><button
+            :class="{active:view==='ajustes'}" @click="navigate('ajustes')">Accesibilidad</button></div>
+</nav>
+<main id="main" tabindex="-1">
+    <div v-if="loadError" class="notice error"><b>No pudimos cargar el mercado.</b>
+        <p>{{loadError}}</p>
+        <p>Inténtalo nuevamente en unos momentos.</p><button class="btn"
+            @click="load">Volver a intentar</button>
+    </div>
+    <div v-else-if="loading" class="empty" role="status"><span class="spinner"></span>
+        <h2>Preparando tu mercado…</h2>
+    </div>
+    <template v-else-if="['tienda','ofertas','comparar','frecuentes'].includes(view)">
+        <section class="hero">
+            <div class="hero-copy"><span class="eyebrow"><i></i> DE NUESTRO BARRIO, PARA TU HOGAR</span>
+                <h1>{{title}}<br><em>Ahora más cerca.</em></h1>
+                <p>Todo lo que necesitas, en un solo lugar. Compara puestos, encuentra tu mejor precio y compra local.
+                </p><a class="btn primary" href="#catalogo">Explorar el mercado <span>↗</span></a>
+                <div class="hero-note"><span>✓</span> Elige tu puesto. Apoya a tu comunidad.</div>
+            </div>
+            <div class="hero-art" aria-hidden="true">
+                <div class="orbit"></div><span class="art-stamp">BUENO PARA TI<br>BUENO PARA EL BARRIO</span>
+                <div class="product-platform"></div><img class="hero-rice" src="/imagenes/arroz.jpg" alt=""><img
+                    class="hero-oil" src="/imagenes/aceite.jpg" alt=""><img class="hero-oats" src="/imagenes/avena.jpg"
+                    alt=""><span class="floating-tag"><b>Tu compra rinde más</b><small>Compara 3 puestos
+                        locales</small><span>↗</span></span><span class="art-spark">✳</span>
+            </div>
+        </section>
+        <div class="benefits">
+            <div><span>↔</span>
+                <p><b>Compara antes de elegir</b><small>Un producto, distintos puestos</small></p>
+            </div>
+            <div><span>
+                    <Icon name="bag" />
+                </span>
+                <p><b>Compra en tu comunidad</b><small>3 puestos, un mismo mercado</small></p>
+            </div>
+            <div><span>✧</span>
+                <p><b>Cada compra suma</b><small>Canjea puntos por descuentos</small></p>
+            </div>
+        </div>
+        <div v-if="addingOrder" class="notice success inline"><span>Agregando productos al pedido
+                <b>#{{addingOrder.slice(0,8)}}</b></span><button class="btn small" @click="navigate('pedidos')">Terminar
+                edición →</button></div>
+        <section id="catalogo" class="catalogue">
+ <div v-if="stallId" class="store-heading"><div><span class="eyebrow">CATÁLOGO DEL NEGOCIO</span><h2>{{activeStall?.nombre || 'Negocio no encontrado'}}</h2><p v-if="activeStall">{{activeStall.vendedor}} · Precios y existencias de este puesto</p></div><button class="btn" @click="navigate('tienda')">Ver todo el mercado</button></div>
+            <div class="section-heading">
+                <div><span class="eyebrow">TU LISTA EMPIEZA AQUÍ</span>
+                    <h2>{{stallId?'Productos de este negocio':view==='ofertas'?'Pequeños precios. Grandes hallazgos.':view==='comparar'?'El mejor precio lo eliges tú.':view==='frecuentes'?'Tus productos frecuentes':'Encuentra lo que necesitas'}}</h2>
+                </div><button class="text-button" @click="load" :disabled="busy">Actualizar stock ↻</button>
+            </div>
+            <div class="catalogue-controls">
+                <div class="categories" aria-label="Categorías"><button v-for="c in categories"
+                        :class="{selected:category===c}" @click="category=c">{{c==='TODOS'?'Todo el mercado':c==='ALIMENTOS BÁSICOS'?'Alimentos básicos':c==='HIGIENE PERSONAL'?'Higiene personal':'Limpieza del hogar'}}</button></div><label class="sort"><span>Ordenar</span><select
+                        v-model="sort" aria-label="Ordenar productos">
+                        <option value="recommended">Recomendados</option>
+                        <option value="asc">Menor precio</option>
+                        <option value="desc">Mayor precio</option>
+                        <option value="name">Nombre A–Z</option>
+                    </select></label>
+            </div>
+            <div class="results-row"><span>{{filtered.length}} productos <template v-if="search">para
+                        “{{search}}”</template></span><span>{{stallId?'Precio y stock de este negocio':'Precios por puesto · Stock disponible'}}</span></div>
+            <div v-if="view==='frecuentes'&&!user" class="empty">
+                <h3>Tus favoritos empiezan con una compra</h3>
+                <p>Inicia sesión para ver lo que compras con más frecuencia.</p><button class="btn primary"
+                    @click="requireUser">Iniciar sesión</button>
+            </div>
+            <div v-else-if="!filtered.length" class="empty">
+                <h3>{{view==='frecuentes'?'Aún no tienes compras completadas':'No encontramos productos'}}</h3>
+                <p>Prueba con otro nombre o categoría, o vuelve al mercado.</p><button class="btn"
+                    @click="search='';category='TODOS'">Limpiar búsqueda</button>
+            </div>
+            <div v-else class="product-grid">
+                <article v-for="p in filtered" :key="p.id" class="product-card"
+                    @focusin="speak(p.name+', desde '+money(minPrice(p)))">
+                    <div class="product-visual"><span v-if="!stock(p)" class="badge out">Agotado</span><span
+                            v-else-if="p.offer" class="badge">Buen precio</span><span v-else-if="stock(p)<=5"
+                            class="badge low">Últimas unidades</span><button class="compare-icon" @click="compare(p)"
+                            :aria-label="'Comparar precios de '+p.name">↔</button><img :src="p.img" :alt="p.name"
+                            loading="lazy" width="220" height="190"></div>
+                    <div class="product-content"><span class="product-category">{{p.category}}</span>
+                        <h3>{{p.name}}</h3><button class="rating" @click="openReviews(p)"><span>★</span>
+                            {{rating(p)||'Sin reseñas'}} <small
+                                v-if="rating(p)">({{reviews.filter(r=>r.product_id===p.id).length}})</small></button>
+                        <div class="price-line">
+                            <span><small>{{stallId?'Precio del puesto':'Desde'}}</small><strong>{{money(minPrice(p))}}</strong></span><del
+                                v-if="maxPrice(p)>minPrice(p)">{{money(maxPrice(p))}}</del><span
+                                class="stock-label">{{stock(p)}} disponibles</span></div><button class="compare-link"
+                            @click="compare(p)">{{stallId?'Comparar con otros negocios':p.puestos.length+' puestos · Comparar precios'}}
+                            <span>→</span></button><button class="btn add-button" @click="add(p)"
+                            :disabled="busy||!stock(p)">{{!stock(p)?'Sin stock':addingOrder?'Agregar al pedido':'Agregar a mi carrito'}} <span v-if="stock(p)">＋</span></button>
+                    </div>
+                </article>
+            </div>
+        </section>
+        <section class="community"><span class="community-icon">✳</span>
+            <div><span class="eyebrow">COMPRAR LOCAL SE SIENTE BIEN</span>
+                <h2>Detrás de cada puesto,<br>hay alguien de tu barrio.</h2>
+                <p>Compara, elige y sigue apoyando a quienes siempre han estado cerca.</p>
+            </div>
+            <div class="stall-list">
+                <a v-for="s in stalls" :key="s.id" :href="stallUrl(s.id)" target="_blank" rel="noopener" :aria-label="'Ver productos de '+s.nombre+' en una nueva pestaña'">
+                    <span>{{s.vendedor.includes('Carmen')?'C':s.vendedor.includes('Pedro')?'P':'R'}}</span>
+                    <p><b>{{s.nombre}}</b><small>{{s.vendedor}} · Ver productos</small></p><i aria-hidden="true">↗</i>
+                </a>
+            </div>
+        </section>
+    </template>
+    <section v-else-if="view==='pedidos'" class="page-section">
+        <div class="section-heading">
+            <div><span class="eyebrow">TODO EN UN SOLO LUGAR</span>
+                <h1>Mis pedidos</h1>
+                <p class="muted">Tus reservas y tu historial, guardados en tu cuenta.</p>
+            </div><button v-if="user&&visibleOrders.some(o=>o.status!=='pending')" class="text-button"
+                @click="modal='archive'">Ocultar historial</button>
+        </div>
+        <div v-if="!user" class="empty">
+            <h2>Tu mercado también tiene memoria</h2>
+            <p>Inicia sesión para consultar tus pedidos.</p><button class="btn primary" @click="requireUser">Iniciar
+                sesión</button>
+        </div>
+        <div v-else-if="!visibleOrders.length" class="empty">
+            <h2>Tu primera compra te espera</h2>
+            <p>Elige productos y crea un pedido desde el carrito.</p><button class="btn primary"
+                @click="navigate('tienda')">Ir al mercado →</button>
+        </div>
+        <article v-for="o in visibleOrders" class="order-card" :key="o.id">
+            <div class="order-head">
+                <div><b>Pedido #{{o.id.slice(0,8)}}</b><small>{{date(o.created_at)}}</small></div><span class="status"
+                    :class="o.status">{{statusLabel[o.status]}}</span>
+            </div>
+            <div v-for="i in o.order_items" class="order-line" :key="i.product_id+i.stall_id"><img :src="i.image"
+                    :alt="i.name" width="56" height="56">
+                <div class="line-info"><b>{{i.name}}</b><small>{{i.stall_name}} · {{money(i.price)}} c/u</small></div>
+                <div v-if="o.status==='pending'" class="quantity"><button @click="edit(o,i,-1)" :disabled="busy"
+                        :aria-label="'Quitar una unidad de '+i.name">−</button><span>{{i.quantity}}</span><button
+                        @click="edit(o,i,1)" :disabled="busy" :aria-label="'Sumar una unidad de '+i.name">＋</button>
+                </div><span v-else>× {{i.quantity}}</span><b>{{money(i.quantity*i.price)}}</b>
+            </div>
+            <div class="order-bottom">
+                <p>{{o.delivery==='recoger'?'Retiro en el mercado':'Entrega: '+o.delivery_address}}<small
+                        v-if="o.discount">Descuento por puntos: {{money(o.discount)}}</small><small
+                        v-if="o.payments.length">{{paymentLabel[o.payments[0].method]}} · Pago de demostración</small>
+                </p><strong>Total {{money(o.total)}}</strong>
+            </div>
+            <div v-if="o.status==='pending'" class="order-actions"><button class="text-button danger"
+                    @click="askCancel(o)" :disabled="busy">Cancelar pedido</button><button class="btn"
+                    @click="addToOrder(o)" :disabled="busy">Agregar productos</button><button class="btn primary"
+                    @click="openPay(o)" :disabled="busy">Ver opciones de pago →</button></div>
+        </article>
+    </section>
+    <section v-else-if="view==='cuenta'" class="page-section"><span class="eyebrow">TU ESPACIO EN EL MERCADO</span>
+        <h1>Mi cuenta</h1>
+        <div v-if="!user" class="empty"><button class="btn primary" @click="requireUser">Iniciar sesión</button></div>
+        <div v-else class="account-grid">
+            <form class="panel" @submit.prevent="saveProfile">
+                <h2>Un gusto verte, {{profile.name||'vecino'}}.</h2>
+                <p class="muted">{{user.email}}</p><label>Nombre<input v-model="profile.name" maxlength="120" required
+                        autocomplete="name"></label><label>Teléfono<input v-model="profile.phone" type="tel"
+                        maxlength="30" autocomplete="tel"></label><label>Dirección de entrega<textarea
+                        v-model="profile.address" maxlength="300" rows="3" autocomplete="street-address"
+                        placeholder="Calle, número y referencia"></textarea></label><button class="btn primary"
+                    :disabled="busy">Guardar mis datos</button>
+            </form>
+            <div>
+                <div class="points-card"><span>EL BARRIO TE LO AGRADECE</span>
+                    <h2>{{profile.points}} <small>puntos</small></h2>
+                    <p>Gana 0.4 puntos por cada sol de compra completada. Con 500 puntos, canjea S/ 10 desde tu carrito.
+                    </p>
+                    <div class="points-track"><i :style="{width:Math.min(profile.points/500*100,100)+'%'}"></i></div>
+                    <small>Canje disponible en compras desde S/ 10.</small>
+                </div><button class="btn logout" @click="logout" :disabled="busy">Cerrar sesión</button>
+            </div>
+        </div>
+    </section>
+    <section v-else-if="view==='ajustes'" class="page-section narrow"><span class="eyebrow">UN MERCADO PARA TODOS</span>
+        <h1>Hazlo a tu manera.</h1>
+        <p class="muted">Ajusta la lectura y la apariencia para comprar con comodidad.</p>
+        <form class="panel settings" @submit.prevent="saveSettings"><label class="setting-row"><span><b>Modo
+                        oscuro</b><small>Una apariencia más suave para la noche.</small></span><input type="checkbox"
+                    v-model="preferences.dark"></label><label class="setting-row"><span><b>Tamaño de
+                        texto</b><small>Elige cómo prefieres leer.</small></span><select
+                    v-model="preferences.font_size">
+                    <option value="normal">Normal</option>
+                    <option value="large">Grande</option>
+                    <option value="larger">Muy grande</option>
+                </select></label><label class="setting-row"><span><b>Lector de productos</b><small>Lee el nombre y
+                        precio al enfocar un producto.</small></span><input type="checkbox"
+                    v-model="preferences.voice_reader"></label>
+            <div class="notice">Navega con Tab y cierra ventanas con Escape. En el micrófono, prueba “buscar arroz”,
+                “ver carrito” o “mis pedidos”. El dictado depende del navegador.</div><button class="btn primary"
+                :disabled="busy">Guardar preferencias en mi cuenta</button>
+        </form>
+    </section>
+</main>
+<footer>
+    <div class="footer-brand"><b>ESENCIA URBANA.</b>
+        <p>Tu mercado de siempre, más cerca.</p>
+    </div>
+    <div><span>Compra local. Elige mejor.</span><small>Tu barrio, a un clic.</small></div><button
+        class="text-button" @click="modal='support'">¿Te ayudamos? ↗</button>
+</footer>
+<div v-if="toast" class="toast" :class="{error:toast.error}" role="status" aria-live="polite">
+    <span>{{toast.message}}</span><button @click="toast=null" aria-label="Cerrar aviso">×</button></div>
+<div v-if="cartOpen" class="overlay cart-overlay" @click.self="!busy&&(cartOpen=false)">
+    <aside class="cart-panel" role="dialog" aria-modal="true" aria-labelledby="cart-title">
+        <div class="dialog-head">
+            <div><span class="eyebrow">DE TU MERCADO A CASA</span>
+                <h2 id="cart-title">Mi carrito <small>({{cartCount}})</small></h2>
+            </div><button class="close" @click="cartOpen=false" aria-label="Cerrar carrito">×</button>
+        </div>
+        <div v-if="!cartCount" class="empty"><span class="empty-symbol">
+                <Icon name="cart" />
+            </span>
+            <h3>Un carrito lleno de posibilidades</h3>
+            <p>Agrega tus productos favoritos para empezar.</p><button class="btn primary"
+                @click="cartOpen=false;navigate('tienda')">Explorar el mercado</button>
+        </div><template v-else>
+            <div class="cart-lines">
+                <article v-for="i in cartItems" class="cart-line" :key="i.product_id+i.stall_id"><img
+                        :src="i.product?.img" :alt="i.product?.name" width="70" height="70">
+                    <div>
+                        <b>{{i.product?.name||'Producto'}}</b><small>{{i.stall?.nombre}}</small><strong>{{money(i.expected_price)}}</strong>
+                        <p v-if="i.priceChanged" class="danger">El precio cambió. Quita y vuelve a agregar este
+                            producto.</p>
+                        <div class="quantity"><button @click="quantity(i,-1)" :disabled="busy"
+                                :aria-label="'Quitar una unidad de '+i.product?.name">−</button><span>{{i.quantity}}</span><button
+                                @click="quantity(i,1)" :disabled="busy"
+                                :aria-label="'Sumar una unidad de '+i.product?.name">＋</button></div>
+                    </div><button class="remove" @click="remove(i)" :disabled="busy"
+                        :aria-label="'Eliminar '+i.product?.name">×</button>
+                </article>
+            </div>
+            <div class="cart-checkout">
+                <fieldset>
+                    <legend>¿Cómo lo recibes?</legend><label><input type="radio" v-model="delivery" value="recoger">
+                        Recoger en mercado</label><label><input type="radio" v-model="delivery" value="delivery">
+                        Entrega a domicilio</label>
+                </fieldset>
+                <p v-if="delivery==='delivery'" class="muted small-text">Guarda la dirección en Mi cuenta. La entrega se
+                    coordina con el mercado, sin tarifa automática.</p><label v-if="profile.points>=500"
+                    class="redeem"><input type="checkbox" v-model="usePoints" :disabled="subtotal<10"> Canjear 500
+                    puntos por S/ 10</label>
+                <dl class="totals">
+                    <div>
+                        <dt>Subtotal</dt>
+                        <dd>{{money(subtotal)}}</dd>
+                    </div>
+                    <div v-if="discount">
+                        <dt>Descuento por puntos</dt>
+                        <dd>− {{money(discount)}}</dd>
+                    </div>
+                    <div class="total">
+                        <dt>Total</dt>
+                        <dd>{{money(subtotal-discount)}}</dd>
+                    </div>
+                </dl>
+                <p v-if="savings>0" class="saving">Comparando puestos ahorras hasta {{money(savings)}}</p><button
+                    class="btn primary full" @click="checkout"
+                    :disabled="busy||cartItems.some(i=>i.priceChanged)">{{busy?'Guardando…':'Crear pedido'}}
+                    <span>→</span></button><small class="checkout-note">El stock se reserva al crear el pedido.</small>
+            </div>
+        </template>
+    </aside>
+</div>
+<div v-if="modal" class="overlay" @click.self="!busy&&(modal=null)">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button
+            class="close dialog-close" @click="modal=null" :disabled="busy" aria-label="Cerrar ventana">×</button>
+        <template v-if="modal==='auth'"><span class="eyebrow">TU BARRIO, TU CUENTA</span>
+            <h2 id="modal-title">{{authMode==='register'?'Bienvenido a la comunidad.':'Qué bueno tenerte aquí.'}}</h2>
+            <p class="muted">Guarda tus compras, suma puntos y vuelve cuando quieras.</p>
+            <div v-if="!configured" class="notice">El registro y el inicio de sesión estarán disponibles próximamente.</div>
+            <form @submit.prevent="authenticate"><label v-if="authMode==='register'">Tu nombre<input v-model="authName"
+                        required maxlength="120" autocomplete="name"></label><label>Correo electrónico<input
+                        v-model="email" required type="email" autocomplete="email"></label><label>Contraseña<input
+                        v-model="password" required type="password" minlength="8"
+                        :autocomplete="authMode==='register'?'new-password':'current-password'"
+                        placeholder="Mínimo 8 caracteres"></label>
+                <p v-if="authMessage" class="notice success">{{authMessage}}</p><button class="btn primary full"
+                    :disabled="busy||!configured">{{busy?'Un momento…':authMode==='register'?'Crear mi cuenta':'Iniciar sesión'}}</button>
+            </form><button class="text-button auth-switch"
+                @click="authMode=authMode==='login'?'register':'login';authMessage=''">{{authMode==='login'?'¿Primera vez por aquí? Crea tu cuenta':'Ya tengo una cuenta'}}</button>
+        </template>
+        <template v-else-if="modal==='compare'&&selected"><span class="eyebrow">MISMO PRODUCTO, TÚ ELIGES</span>
+            <h2 id="modal-title">Compara los puestos</h2>
+            <div class="compare-product"><img :src="selected.img" :alt="selected.name" width="90" height="90">
+                <div>
+                    <h3>{{selected.name}}</h3>
+                    <p class="muted">Elige dónde quieres comprar.</p>
+                </div>
+            </div><label v-for="s in selected.puestos" class="stall-option"
+                :class="{chosen:selectedStall===s.id,disabled:!s.stock}" :key="s.id"><input type="radio"
+                    v-model="selectedStall" :value="s.id" :disabled="!s.stock">
+                <div><b>{{s.nombre}}</b><small>{{s.vendedor}} · {{s.stock}} disponibles</small><span
+                        v-if="s.id===cheapest(selected)?.id" class="best-price">Mejor precio disponible</span></div>
+                <strong>{{money(s.precio)}}</strong>
+            </label><button class="btn primary full" @click="add(selected,selectedStall)"
+                :disabled="busy||!selected.puestos.find(s=>s.id===selectedStall)?.stock">{{addingOrder?'Agregar al pedido':'Agregar a mi carrito'}} →</button>
+        </template>
+        <template v-else-if="modal==='payment'&&selectedOrder"><span class="eyebrow">UN PASO MÁS</span>
+            <h2 id="modal-title">Opciones de pago</h2>
+            <p>Pedido #{{selectedOrder.id.slice(0,8)}} · <b>{{money(selectedOrder.total)}}</b></p>
+            <div class="notice">Pago de demostración: registra una compra simulada y no cobra dinero. No ingreses
+                tarjetas ni claves.</div><label v-for="(label,key) in paymentLabel" class="stall-option"><input
+                    type="radio" v-model="paymentMethod" :value="key"><b>{{label}}</b></label><button
+                class="btn primary full" @click="pay" :disabled="busy">{{busy?'Guardando…':'Confirmar pago de demostración'}}</button>
+        </template>
+        <template v-else-if="modal==='cancel'"><span class="eyebrow">TU PEDIDO</span>
+            <h2 id="modal-title">¿Cancelar este pedido?</h2>
+            <p>Los productos volverán a estar disponibles. Los puntos canjeados se devolverán a tu cuenta.</p>
+            <div class="dialog-actions"><button class="btn" @click="modal=null" :disabled="busy">Conservar
+                    pedido</button><button class="btn danger-button" @click="cancel" :disabled="busy">Cancelar
+                    pedido</button></div>
+        </template>
+        <template v-else-if="modal==='archive'">
+            <h2 id="modal-title">¿Ocultar el historial?</h2>
+            <p>Los pedidos completados y cancelados dejarán de verse aquí. Los registros y tus puntos se conservarán.
+            </p><button class="btn primary full" @click="archive" :disabled="busy">Ocultar historial</button>
+        </template>
+        <template v-else-if="modal==='support'"><span class="eyebrow">ESTAMOS PARA AYUDARTE</span>
+            <h2 id="modal-title">Cuéntanos qué necesitas.</h2>
+            <p class="muted">Tu mensaje quedará guardado para el equipo del mercado.</p>
+            <form @submit.prevent="sendSupport"><label>Tu mensaje<textarea v-model="support" required minlength="3"
+                        maxlength="4000" rows="5" placeholder="Escribe aquí…"></textarea></label><button
+                    class="btn primary full" :disabled="busy">Enviar mensaje</button></form>
+        </template>
+        <template v-else-if="modal==='reviews'&&selected"><span class="eyebrow">LA VOZ DEL BARRIO</span>
+            <h2 id="modal-title">{{selected.name}}</h2>
+            <div class="review-list">
+                <p v-if="!productReviews.length" class="muted">Todavía no hay reseñas para este producto.</p>
+                <article v-for="r in productReviews" class="review"><b
+                        class="stars">{{'★'.repeat(r.rating)}}{{'☆'.repeat(5-r.rating)}}</b><small>{{date(r.created_at)}}
+                        · Compra verificada</small>
+                    <p>{{r.comment}}</p>
+                </article>
+            </div>
+            <form v-if="canReview" @submit.prevent="saveReview">
+                <h3>Tu experiencia cuenta</h3><label>Calificación<select v-model="reviewRating">
+                        <option v-for="n in 5" :value="n">{{n}} {{n===1?'estrella':'estrellas'}}</option>
+                    </select></label><label>Reseña<textarea v-model="reviewComment" required minlength="3"
+                        maxlength="1000" rows="3"></textarea></label><button class="btn primary full"
+                    :disabled="busy">Guardar reseña</button>
+            </form>
+            <p v-else class="notice">Puedes dejar una reseña después de completar una compra de este producto.</p>
+        </template>
+    </section>
+</div>
