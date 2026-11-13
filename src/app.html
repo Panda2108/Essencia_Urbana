@@ -170,9 +170,10 @@
             <div class="order-bottom">
                 <p>{{o.delivery==='recoger'?'Retiro en el mercado':'Entrega: '+o.delivery_address}}<small
                         v-if="o.discount">Descuento por puntos: {{money(o.discount)}}</small><small
-                        v-if="o.payments.length">{{paymentLabel[o.payments[0].method]}} · Pago de demostración</small>
+                        v-if="o.payments?.length">{{paymentLabel[o.payments[0].method]}} · Pago de demostración</small>
                 </p><strong>Total {{money(o.total)}}</strong>
             </div>
+            <div v-if="o.status==='completed'" class="order-actions"><button class="btn" @click="openReceipt(o)">Ver comprobante</button></div>
             <div v-if="o.status==='pending'" class="order-actions"><button class="text-button danger"
                     @click="askCancel(o)" :disabled="busy">Cancelar pedido</button><button class="btn"
                     @click="addToOrder(o)" :disabled="busy">Agregar productos</button><button class="btn primary"
@@ -335,7 +336,19 @@
                     type="radio" v-model="paymentMethod" :value="key"><b>{{label}}</b></label><button
                 class="btn primary full" @click="pay" :disabled="busy">{{busy?'Guardando…':'Confirmar pago de demostración'}}</button>
         </template>
-        <template v-else-if="modal==='cancel'"><span class="eyebrow">TU PEDIDO</span>
+        <template v-else-if="modal==='receipt'&&selectedOrder">
+ <div class="receipt-success" aria-hidden="true">✓</div><span class="eyebrow">GRACIAS POR COMPRAR LOCAL</span>
+ <h2 id="modal-title">¡Tu compra está completa!</h2>
+ <p class="muted">Pedido #{{selectedOrder.id.slice(0,8)}} · {{date(selectedOrder.created_at)}}</p>
+ <div v-for="i in selectedOrder.order_items" class="receipt-line"><div><b>{{i.name}}</b><small>{{i.stall_name}} · {{i.quantity}} × {{money(i.price)}}</small></div><strong>{{money(i.quantity*i.price)}}</strong></div>
+ <dl class="totals"><div><dt>Subtotal</dt><dd>{{money(selectedOrder.subtotal)}}</dd></div><div v-if="selectedOrder.discount"><dt>Descuento por puntos</dt><dd>− {{money(selectedOrder.discount)}}</dd></div><div class="total"><dt>Total</dt><dd>{{money(selectedOrder.total)}}</dd></div></dl>
+ <p>{{selectedOrder.delivery==='recoger'?'Retira tus productos en el mercado.':'Entrega: '+selectedOrder.delivery_address}}</p>
+ <p class="saving">Ganaste {{Math.round(selectedOrder.total*0.4)}} puntos · Saldo: {{profile.points}} puntos</p>
+ <p class="muted small-text">Pago de demostración. No se realizó un cobro real. Este comprobante no tiene valor tributario.</p>
+ <button class="btn primary full" @click="downloadReceipt">Descargar comprobante</button>
+ <button class="text-button auth-switch" @click="modal=null;navigate('pedidos')">Ver mis pedidos →</button>
+</template>
+<template v-else-if="modal==='cancel'"><span class="eyebrow">TU PEDIDO</span>
             <h2 id="modal-title">¿Cancelar este pedido?</h2>
             <p>Los productos volverán a estar disponibles. Los puntos canjeados se devolverán a tu cuenta.</p>
             <div class="dialog-actions"><button class="btn" @click="modal=null" :disabled="busy">Conservar
