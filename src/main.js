@@ -1,12 +1,14 @@
 import { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue/dist/vue.esm-bundler.js';
-import { db, configured, result, catalogue, accountData, rpc } from './api.js';
+import { db, configured, result, catalogue, accountData, customerPhases, rpc } from './api.js';
 import { previewProducts } from './catalogue.js';
 import template from './app.html?raw';
 import VendorPanel from './vendor.js';
 import './style.css';
 export const money = value => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value || 0));
 const date = value => new Date(value).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' });
-const statusLabel = { pending: 'Por pagar', completed: 'Completado', cancelled: 'Cancelado' };
+const statusLabel = { pending: 'Por pagar', completed: 'Pago confirmado', cancelled: 'Cancelado' };
+const phaseLabels={nuevo:'Recibido',preparando:'En proceso',listo:'Listo para entregar',entregado:'Entregado'};
+const phaseReached=(stage,key)=>Object.keys(phaseLabels).indexOf(key)<=Object.keys(phaseLabels).indexOf(stage);
 const paymentLabel = { pagoefectivo: 'PagoEfectivo', billetera: 'Yape / Plin', tarjeta: 'Tarjeta' };
 const iconPaths = {
  cart:'M3 3h2l2.4 11.4a2 2 0 0 0 2 1.6H18a2 2 0 0 0 2-1.6L21 7H6 M10 20h.01 M18 20h.01',
@@ -34,7 +36,7 @@ createApp({
  const authMode=ref('login'),authName=ref(''),email=ref(''),password=ref(''),authMessage=ref('');
  const delivery=ref('recoger'),usePoints=ref(false),paymentMethod=ref('billetera');
  const support=ref(''),reviewRating=ref(5),reviewComment=ref(''),toast=ref(null),listening=ref(false);
- let toastTimer,subscription,recognition,previousFocus;
+ let toastTimer,subscription,recognition,previousFocus,orderPoll,phaseRefreshing=false;
  const notify=(message,error=false)=>{clearTimeout(toastTimer);toast.value={message,error};toastTimer=setTimeout(()=>toast.value=null,error?12000:5000);};
  const errorText=e=>{const s=e?.message||'No se pudo completar la operación.';if(/Invalid login credentials/i.test(s))return 'Correo o contraseña incorrectos.';if(/Email not confirmed/i.test(s))return 'Confirma tu correo antes de iniciar sesión.';if(/Failed to fetch|NetworkError/i.test(s))return 'No se pudo conectar. Revisa tu conexión y vuelve a intentar.';return s;};
  async function refresh(){
@@ -45,6 +47,11 @@ createApp({
  if(account){vendor.value=account.vendor;profile.value=account.profile;preferences.value=account.preferences;cart.value=account.cart;orders.value=account.orders;reviews.value=account.reviews;}
  loadError.value='';
  }
+ async function refreshPhases(){
+  if(!user.value||phaseRefreshing)return;phaseRefreshing=true;const id=user.value.id;
+  try{const phases=await customerPhases();if(user.value?.id===id)orders.value=orders.value.map(o=>({...o,progress:phases.filter(p=>p.order_id===o.id)}));}finally{phaseRefreshing=false;}
+ }
+ async function refreshOrders(){await action(refresh);}
  async function load(){loading.value=true;try{
  if(!configured){products.value=previewProducts.map(p=>({...p,img:'/'+p.img}));return;}
  const session=await result(db.auth.getSession());user.value=session.session?.user||null;await refresh();if(vendor.value)view.value='negocio';
@@ -81,7 +88,7 @@ createApp({
  async function remove(i){await quantity(i,-i.quantity);}
  async function checkout(){if(!requireUser()||!cartCount.value)return;await action(async()=>{let request=sessionStorage.getItem('eu_checkout_request');if(!request){request=crypto.randomUUID();sessionStorage.setItem('eu_checkout_request',request);}await rpc('create_order',{p_request_id:request,p_delivery:delivery.value,p_use_points:discount.value>0});sessionStorage.removeItem('eu_checkout_request');usePoints.value=false;cartOpen.value=false;view.value='pedidos';await refresh();},'Pedido guardado. Puedes editarlo, pagarlo o cancelarlo.');}
  function openPay(o){selectedOrder.value=o;modal.value='payment';}
- async function pay(){await action(async()=>{const id=selectedOrder.value.id;await rpc('confirm_demo_payment',{p_order_id:id,p_method:paymentMethod.value});await refresh();const completed=orders.value.find(o=>o.id===id);if(completed)openReceipt(completed);else modal.value=null;},'Compra de demostración completada.');}
+ async function pay(){await action(async()=>{const id=selectedOrder.value.id;await rpc('confirm_demo_payment',{p_order_id:id,p_method:paymentMethod.value});await refresh();const completed=orders.value.find(o=>o.id===id);if(completed)openReceipt(completed);else modal.value=null;},'Pago confirmado. Sigue la preparación en Mis pedidos.');}
  function openReceipt(order){selectedOrder.value=order;modal.value='receipt';}
  function downloadReceipt(){
   const order=selectedOrder.value;if(!order)return;
@@ -106,8 +113,8 @@ createApp({
  watch(modal,async v=>{if(v){previousFocus=document.activeElement;await nextTick();document.querySelector('.dialog input, .dialog button')?.focus();}else previousFocus?.focus?.();});
  watch(cartOpen,async v=>{if(v){previousFocus=document.activeElement;await nextTick();document.querySelector('.cart-panel button')?.focus();}else if(!modal.value)previousFocus?.focus?.();});
  const keyHandler=e=>{if(e.key==='Escape'&&!busy.value){modal.value=null;cartOpen.value=false;}const root=modal.value?document.querySelector('.dialog'):cartOpen.value?document.querySelector('.cart-panel'):null;if(e.key==='Tab'&&root){const f=[...root.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea,select,a[href]')].filter(el=>el.offsetParent!==null),first=f[0],last=f.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};
- onMounted(async()=>{document.addEventListener('keydown',keyHandler);await load();if(db)subscription=db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT')clearAccount();else if(event==='SIGNED_IN'&&session?.user?.id!==user.value?.id){user.value=session.user;setTimeout(()=>refresh().catch(e=>notify(errorText(e),true)),0);}}).data.subscription;});
- onUnmounted(()=>{document.removeEventListener('keydown',keyHandler);subscription?.unsubscribe();clearTimeout(toastTimer);recognition?.abort();});
- return {vendor,refresh,stallId,stalls,activeStall,stallUrl,configured,user,products,cart,orders,reviews,profile,preferences,view,category,search,sort,busy,loading,loadError,cartOpen,menuOpen,modal,selected,selectedStall,selectedOrder,addingOrder,authMode,authName,email,password,authMessage,delivery,usePoints,paymentMethod,support,reviewRating,reviewComment,toast,listening,money,date,statusLabel,paymentLabel,categories,minPrice,maxPrice,stock,cheapest,cartQuantity,cartItems,cartCount,subtotal,discount,savings,visibleOrders,pendingOrders,filtered,title,productReviews,rating,canReview,navigate,compare,speak,add,quantity,remove,checkout,openPay,pay,openReceipt,downloadReceipt,askCancel,cancel,edit,addToOrder,archive,authenticate,logout,saveProfile,saveSettings,sendSupport,openReviews,saveReview,voiceSearch,load,notify,requireUser};
+ onMounted(async()=>{document.addEventListener('keydown',keyHandler);orderPoll=setInterval(()=>{if(user.value&&view.value==='pedidos'&&!busy.value)refreshPhases().catch(()=>{});},15000);await load();if(db)subscription=db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT')clearAccount();else if(event==='SIGNED_IN'&&session?.user?.id!==user.value?.id){user.value=session.user;setTimeout(()=>refresh().catch(e=>notify(errorText(e),true)),0);}}).data.subscription;});
+ onUnmounted(()=>{document.removeEventListener('keydown',keyHandler);subscription?.unsubscribe();clearInterval(orderPoll);clearTimeout(toastTimer);recognition?.abort();});
+ return {phaseLabels,phaseReached,refreshOrders,vendor,refresh,stallId,stalls,activeStall,stallUrl,configured,user,products,cart,orders,reviews,profile,preferences,view,category,search,sort,busy,loading,loadError,cartOpen,menuOpen,modal,selected,selectedStall,selectedOrder,addingOrder,authMode,authName,email,password,authMessage,delivery,usePoints,paymentMethod,support,reviewRating,reviewComment,toast,listening,money,date,statusLabel,paymentLabel,categories,minPrice,maxPrice,stock,cheapest,cartQuantity,cartItems,cartCount,subtotal,discount,savings,visibleOrders,pendingOrders,filtered,title,productReviews,rating,canReview,navigate,compare,speak,add,quantity,remove,checkout,openPay,pay,openReceipt,downloadReceipt,askCancel,cancel,edit,addToOrder,archive,authenticate,logout,saveProfile,saveSettings,sendSupport,openReviews,saveReview,voiceSearch,load,notify,requireUser};
  },template
 }).mount('#app');

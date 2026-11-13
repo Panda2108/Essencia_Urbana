@@ -10,6 +10,7 @@ export function normalizeAccount(data = {}) {
       ...order,
       order_items: list(order.order_items),
       payments: list(order.payments),
+      progress: list(order.progress),
     })),
     reviews: list(data.reviews),
     vendor: data.vendor || null,

@@ -36,3 +36,17 @@ Tres cuentas de demostración creadas en Supabase y asignadas a sus puestos medi
 Funciones: reposiciones/retiros de existencias con motivo, cambios de precio, alertas de stock, pedidos del puesto, preparación/entrega, totales e historial de movimientos. Las operaciones están protegidas mediante membresía del lado de PostgreSQL; el navegador no puede elegir el puesto que administra.
 
 Diez pruebas PostgreSQL adicionales verifican aislamiento, permisos, stock no negativo, idempotencia, concurrencia de precios y preparación de pedidos propios. Prueba de navegador aislada del panel aprobada; prueba de compra de clientes repetida con éxito. Se verifican 27 pruebas de datos y plantillas en total cuando se proporcionan los SQL externos.
+
+## Productos con fotografías, historial y fases
+
+Formulario de alta con foto JPG/PNG/WebP de hasta 5 MB, nombre, categoría, precio y stock. Las imágenes se suben mediante Supabase Storage y cada proveedor solo usa su propia carpeta. La creación es transaccional e idempotente; el producto queda vinculado al puesto del usuario autenticado. La política de limpieza no permite borrar fotos utilizadas por productos publicados.
+
+Comparación de precios conservada en las tarjetas de la página principal; se retiró la pestaña separada y los comparadores en catálogos de negocios.
+
+Avance obligatorio: Recibido → En proceso → Listo para entregar → Entregado. UI y SQL impiden saltar fases o retroceder. El cliente consulta el progreso de cada negocio y la pantalla de pedidos lo actualiza cada 15 segundos, además del botón de actualización manual. Pago confirmado y entrega son estados separados.
+
+Historial de proveedores separado de los pedidos activos: entregados y cancelados, con filtros y paginación por fecha e identificador para no omitir pedidos con la misma fecha.
+
+Nueve pruebas PostgreSQL adicionales de permisos de fotos, creación, idempotencia, aislamiento de clientes, fases estrictas y paginación. Prueba de navegador del alta con una foto real y de las fases cliente/proveedor aprobada en un servicio aislado. Actualización SQL aplicada por el usuario y endpoints reales comprobados; subida y lectura pública de una foto temporal verificadas en Supabase, sin crear productos ficticios ni alterar stock.
+
+Las tres contraseñas de proveedor se reemplazaron y se entregan únicamente en el archivo privado externo al repositorio.

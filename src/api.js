@@ -13,12 +13,18 @@ export async function membership(id) {
  if(error) throw error;
  return data;
 }
+export async function customerPhases(){
+ const {data,error}=await db.rpc('get_customer_order_phases');
+ if(error&&error.code==='PGRST202')return [];
+ if(error)throw error;
+ return data||[];
+}
 export async function accountData(id) {
- const [profile, preferences, cart, orders, reviews, vendor] = await Promise.all([
+ const [profile, preferences, cart, orders, reviews, vendor, phases] = await Promise.all([
  result(db.from('profiles').select('*').eq('id', id).single()),
  result(db.from('preferences').select('*').eq('user_id', id).single()),
  result(db.from('cart_items').select('*').eq('user_id', id).order('product_id')),
  result(db.from('orders').select('*,order_items(*),payments(*)').eq('user_id', id).order('created_at', { ascending: false })),
- result(db.from('reviews').select('*').order('created_at', { ascending: false })), membership(id)]);
- return normalizeAccount({ profile, preferences, cart, orders, reviews, vendor });
+ result(db.from('reviews').select('*').order('created_at', { ascending: false })), membership(id), customerPhases()]);
+ return normalizeAccount({ profile, preferences, cart, orders:(orders||[]).map(o=>({...o,progress:phases.filter(p=>p.order_id===o.id)})), reviews, vendor });
 }

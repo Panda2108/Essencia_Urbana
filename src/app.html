@@ -23,7 +23,7 @@
 </header>
 <nav class="nav" :class="{expanded:menuOpen}" aria-label="Navegación principal">
     <div class="nav-main"><button
-            v-for="(label,key) in {tienda:'El mercado',ofertas:'Ofertas',comparar:'Comparar precios',frecuentes:'Mis frecuentes'}"
+            v-for="(label,key) in {tienda:'El mercado',ofertas:'Ofertas',frecuentes:'Mis frecuentes'}"
             :key="key" :class="{active:view===key}" @click="navigate(key)">{{label}} <span v-if="key==='ofertas'"
                 class="tiny-dot"></span></button></div>
     <div class="nav-secondary"><button v-if="vendor" :class="{active:view==='negocio'}" @click="navigate('negocio')">Mi negocio</button><button :class="{active:view==='pedidos'}" @click="navigate('pedidos')">Mis pedidos <b
@@ -105,7 +105,7 @@
                     @focusin="speak(p.name+', desde '+money(minPrice(p)))">
                     <div class="product-visual"><span v-if="!stock(p)" class="badge out">Agotado</span><span
                             v-else-if="p.offer" class="badge">Buen precio</span><span v-else-if="stock(p)<=5"
-                            class="badge low">Últimas unidades</span><button class="compare-icon" @click="compare(p)"
+                            class="badge low">Últimas unidades</span><button class="compare-icon" v-if="!stallId&&p.puestos.length>1" @click="compare(p)"
                             :aria-label="'Comparar precios de '+p.name">↔</button><img :src="p.img" :alt="p.name"
                             loading="lazy" width="220" height="190"></div>
                     <div class="product-content"><span class="product-category">{{p.category}}</span>
@@ -115,9 +115,9 @@
                         <div class="price-line">
                             <span><small>{{stallId?'Precio del puesto':'Desde'}}</small><strong>{{money(minPrice(p))}}</strong></span><del
                                 v-if="maxPrice(p)>minPrice(p)">{{money(maxPrice(p))}}</del><span
-                                class="stock-label">{{stock(p)}} disponibles</span></div><button class="compare-link"
+                                class="stock-label">{{stock(p)}} disponibles</span></div><button class="compare-link" v-if="!stallId&&p.puestos.length>1"
                             @click="compare(p)">{{stallId?'Comparar con otros negocios':p.puestos.length+' puestos · Comparar precios'}}
-                            <span>→</span></button><button class="btn add-button" @click="add(p)"
+                            <span>→</span></button><div v-else class="compare-link product-seller">{{p.puestos[0]?.nombre}}</div><button class="btn add-button" @click="add(p)"
                             :disabled="busy||!stock(p)">{{!stock(p)?'Sin stock':addingOrder?'Agregar al pedido':'Agregar a mi carrito'}} <span v-if="stock(p)">＋</span></button>
                     </div>
                 </article>
@@ -142,7 +142,7 @@
             <div><span class="eyebrow">TODO EN UN SOLO LUGAR</span>
                 <h1>Mis pedidos</h1>
                 <p class="muted">Tus reservas y tu historial, guardados en tu cuenta.</p>
-            </div><button v-if="user&&visibleOrders.some(o=>o.status!=='pending')" class="text-button"
+            </div><button v-if="user" class="text-button" @click="refreshOrders" :disabled="busy">Actualizar pedidos ↻</button><button v-if="user&&visibleOrders.some(o=>o.status!=='pending')" class="text-button"
                 @click="modal='archive'">Ocultar historial</button>
         </div>
         <div v-if="!user" class="empty">
@@ -174,6 +174,11 @@
                         v-if="o.payments?.length">{{paymentLabel[o.payments[0].method]}} · Pago de demostración</small>
                 </p><strong>Total {{money(o.total)}}</strong>
             </div>
+            <section v-for="phase in o.progress" :key="phase.stall_id" class="customer-phases" :aria-label="'Preparación de '+phase.stall_name">
+              <h3>{{phase.stall_name}} · {{phaseLabels[phase.stage]}}</h3>
+              <small>Actualizado {{date(phase.updated_at)}} · Las fases se actualizan automáticamente</small>
+              <ol class="order-phase-steps"><li v-for="(label,key) in phaseLabels" :class="{done:phaseReached(phase.stage,key),current:phase.stage===key}"><span aria-hidden="true">{{phaseReached(phase.stage,key)?'✓':'○'}}</span>{{label}}</li></ol>
+            </section>
             <div v-if="o.status==='completed'" class="order-actions"><button class="btn" @click="openReceipt(o)">Ver comprobante</button></div>
             <div v-if="o.status==='pending'" class="order-actions"><button class="text-button danger"
                     @click="askCancel(o)" :disabled="busy">Cancelar pedido</button><button class="btn"
@@ -339,15 +344,15 @@
         </template>
         <template v-else-if="modal==='receipt'&&selectedOrder">
  <div class="receipt-success" aria-hidden="true">✓</div><span class="eyebrow">GRACIAS POR COMPRAR LOCAL</span>
- <h2 id="modal-title">¡Tu compra está completa!</h2>
+ <h2 id="modal-title">¡Tu pago está confirmado!</h2>
  <p class="muted">Pedido #{{selectedOrder.id.slice(0,8)}} · {{date(selectedOrder.created_at)}}</p>
  <div v-for="i in selectedOrder.order_items" class="receipt-line"><div><b>{{i.name}}</b><small>{{i.stall_name}} · {{i.quantity}} × {{money(i.price)}}</small></div><strong>{{money(i.quantity*i.price)}}</strong></div>
  <dl class="totals"><div><dt>Subtotal</dt><dd>{{money(selectedOrder.subtotal)}}</dd></div><div v-if="selectedOrder.discount"><dt>Descuento por puntos</dt><dd>− {{money(selectedOrder.discount)}}</dd></div><div class="total"><dt>Total</dt><dd>{{money(selectedOrder.total)}}</dd></div></dl>
- <p>{{selectedOrder.delivery==='recoger'?'Retira tus productos en el mercado.':'Entrega: '+selectedOrder.delivery_address}}</p>
+ <p>{{selectedOrder.delivery==='recoger'?'El negocio preparará tus productos. Retíralos cuando figuren listos para entregar.':'Entrega: '+selectedOrder.delivery_address}}</p>
  <p class="saving">Ganaste {{Math.round(selectedOrder.total*0.4)}} puntos · Saldo: {{profile.points}} puntos</p>
  <p class="muted small-text">Pago de demostración. No se realizó un cobro real. Este comprobante no tiene valor tributario.</p>
  <button class="btn primary full" @click="downloadReceipt">Descargar comprobante</button>
- <button class="text-button auth-switch" @click="modal=null;navigate('pedidos')">Ver mis pedidos →</button>
+ <button class="text-button auth-switch" @click="modal=null;navigate('pedidos')">Seguir mi pedido →</button>
 </template>
 <template v-else-if="modal==='cancel'"><span class="eyebrow">TU PEDIDO</span>
             <h2 id="modal-title">¿Cancelar este pedido?</h2>
